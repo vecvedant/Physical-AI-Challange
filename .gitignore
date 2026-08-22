@@ -37,3 +37,6 @@ desktop.ini
 
 # Report intermediates
 docs/report/~$*.docx
+
+# Test cache
+.pytest_cache/
