@@ -136,6 +136,59 @@ class LearningConfig:
 
 
 # --------------------------------------------------------------------------- #
+# Site and generation
+# --------------------------------------------------------------------------- #
+@dataclass
+class SiteConfig:
+    """
+    Where the node is and what is bolted to the roof.
+
+    Defaults are Pune, Maharashtra - a placeholder. Every one of these must be
+    corrected for the actual installation before the solar forecast means
+    anything, which is why they are gathered here rather than scattered.
+    """
+
+    latitude: float = 18.52
+    longitude: float = 73.86
+    timezone_offset_h: float = 5.5      # IST; used for solar geometry only
+
+    # Array geometry.
+    array_peak_w: float = 3000.0
+    tilt_deg: float = 20.0              # from horizontal
+    azimuth_deg: float = 180.0          # 180 = due south
+    # Everything between the cells and the meter: inverter, wiring, mismatch.
+    system_efficiency: float = 0.80
+    # Output falls as the cells heat up. -0.38%/K is typical for silicon.
+    temp_coeff_per_k: float = -0.0038
+    noct_c: float = 45.0                # nominal operating cell temperature
+
+    # Battery, as installed.
+    battery_capacity_wh: float = 5000.0
+    battery_max_charge_w: float = 1500.0
+    battery_max_discharge_w: float = 1500.0
+    battery_soc_floor: float = 0.20
+    battery_soc_ceiling: float = 0.95
+    battery_round_trip_efficiency: float = 0.90
+    # Installed cost and cycle life, which together price a kWh of throughput.
+    battery_capex_inr_per_kwh: float = 15000.0
+    battery_cycle_life: float = 4000.0
+
+
+@dataclass
+class WeatherConfig:
+    # Open-Meteo needs no API key, which matters: a key is one more thing to
+    # expire silently on a box nobody logs into.
+    endpoint: str = "https://api.open-meteo.com/v1/forecast"
+    forecast_days: int = 3
+    refresh_minutes: int = 180
+    request_timeout_s: float = 15.0
+    # How stale a cached forecast may be before we stop believing it and fall
+    # back to climatology built from the site's own history.
+    max_cache_age_h: float = 12.0
+    cache_path: str = str(DATA_DIR / "weather_cache.json")
+
+
+# --------------------------------------------------------------------------- #
 # Sustainability accounting
 # --------------------------------------------------------------------------- #
 @dataclass
@@ -211,6 +264,8 @@ class StoreConfig:
 @dataclass
 class Config:
     site_name: str = "Udyog IQ Reference Node"
+    site: SiteConfig = field(default_factory=SiteConfig)
+    weather: WeatherConfig = field(default_factory=WeatherConfig)
     meter: MeterConfig = field(default_factory=MeterConfig)
     pipeline: PipelineConfig = field(default_factory=PipelineConfig)
     learning: LearningConfig = field(default_factory=LearningConfig)
@@ -224,6 +279,8 @@ class Config:
 
 
 _SECTIONS = {
+    "site": SiteConfig,
+    "weather": WeatherConfig,
     "meter": MeterConfig,
     "pipeline": PipelineConfig,
     "learning": LearningConfig,
