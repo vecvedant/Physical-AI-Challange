@@ -467,6 +467,12 @@ class UdyogIQ:
             if self.load_forecaster.fit(np.asarray(ts), np.asarray(pw)):
                 self.load_forecaster.save()
 
+        # Close out anything the replay left believed-on. The live loop starts
+        # on a fresh clock, so without this every machine that happened to be
+        # running when the replay ended stays "on" until the first scheduled
+        # consolidation fifteen minutes later - measured as a -9548 W residual
+        # on a dashboard that had only just come up.
+        self.nilm.expire_stale(time.time())
         self._task_consolidate()
         self.health.save_all(MODEL_DIR)
 

@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="/static/manifest.webmanifest">
+<title>Udyog IQ</title>
+<style>
+/* Mobile first, and mostly mobile only. This is read on a phone standing next
+   to a machine, so: big numbers, high contrast, no hover-dependent affordances,
+   and nothing that needs two hands. */
+*,*::before,*::after{box-sizing:border-box}
+:root{
+  --bg:#0b1220; --panel:#131c2e; --panel-2:#1a2540; --line:#243250;
+  --text:#e8eefc; --dim:#8fa3c8; --faint:#5d719a;
+  --ok:#34d399; --warn:#fbbf24; --bad:#f87171;
+  --solar:#fbbf24; --grid:#60a5fa; --batt:#a78bfa; --load:#e8eefc;
+  --r:14px;
+}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+  font:15px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased}
+body{padding:0 0 env(safe-area-inset-bottom)}
+.wrap{max-width:820px;margin:0 auto;padding:12px 12px 90px}
+
+header{position:sticky;top:0;z-index:20;background:rgba(11,18,32,.92);
+  backdrop-filter:blur(12px);border-bottom:1px solid var(--line);
+  padding:calc(10px + env(safe-area-inset-top)) 12px 10px}
+.hrow{max-width:820px;margin:0 auto;display:flex;align-items:center;gap:10px}
+.brand{font-weight:700;letter-spacing:.2px;font-size:17px}
+.brand span{color:var(--faint);font-weight:500}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--bad);flex:none;
+  box-shadow:0 0 0 3px rgba(248,113,113,.18)}
+.dot.on{background:var(--ok);box-shadow:0 0 0 3px rgba(52,211,153,.18)}
+.mode{margin-left:auto;font-size:11px;letter-spacing:.6px;text-transform:uppercase;
+  color:var(--dim);border:1px solid var(--line);padding:4px 9px;border-radius:999px}
+.mode.active{color:var(--ok);border-color:rgba(52,211,153,.4)}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+  padding:14px;margin:12px 0}
+.card h2{margin:0 0 10px;font-size:12px;letter-spacing:.9px;text-transform:uppercase;
+  color:var(--faint);font-weight:600;display:flex;align-items:center;gap:8px}
+.card h2 .tag{margin-left:auto;font-size:10px;color:var(--faint);
+  border:1px solid var(--line);padding:2px 7px;border-radius:999px;letter-spacing:.4px}
+
+.big{font-size:44px;font-weight:750;line-height:1;letter-spacing:-1.5px;
+  font-variant-numeric:tabular-nums}
+.big small{font-size:16px;font-weight:600;color:var(--dim);margin-left:5px;letter-spacing:0}
+.sub{color:var(--dim);font-size:13px;margin-top:6px}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tile{background:var(--panel-2);border-radius:11px;padding:11px}
+.tile .k{font-size:10.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--faint)}
+.tile .v{font-size:20px;font-weight:700;margin-top:3px;font-variant-numeric:tabular-nums}
+.tile .u{font-size:11px;color:var(--dim);font-weight:500}
+
+/* Energy flow: four bars sharing one scale, so relative magnitude is readable
+   at a glance without reading any number. */
+.flow{display:flex;flex-direction:column;gap:9px;margin-top:4px}
+.fr{display:grid;grid-template-columns:64px 1fr 84px;align-items:center;gap:10px}
+.fr .lbl{font-size:12px;color:var(--dim)}
+.fr .bar{height:10px;background:var(--panel-2);border-radius:6px;overflow:hidden;position:relative}
+.fr .bar i{position:absolute;top:0;bottom:0;left:50%;width:0;border-radius:6px;
+  transition:width .45s cubic-bezier(.2,.8,.2,1),left .45s cubic-bezier(.2,.8,.2,1)}
+.fr .val{text-align:right;font-size:13px;font-variant-numeric:tabular-nums;font-weight:600}
+.zero{position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--line)}
+
+canvas{width:100%;height:150px;display:block}
+
+.mach{display:flex;align-items:center;gap:10px;padding:10px 0;
+  border-bottom:1px solid var(--line)}
+.mach:last-child{border-bottom:0}
+.mach .nm{font-weight:650;font-size:14.5px}
+.mach .mt{font-size:11.5px;color:var(--faint);margin-top:2px}
+.mach .rt{margin-left:auto;text-align:right;flex:none}
+.pill{display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;
+  border-radius:999px;font-variant-numeric:tabular-nums}
+.pill.ok{background:rgba(52,211,153,.15);color:var(--ok)}
+.pill.warn{background:rgba(251,191,36,.15);color:var(--warn)}
+.pill.bad{background:rgba(248,113,113,.15);color:var(--bad)}
+.pill.idle{background:rgba(93,113,154,.18);color:var(--dim)}
+.onled{width:7px;height:7px;border-radius:50%;background:var(--faint);flex:none}
+.onled.on{background:var(--ok);box-shadow:0 0 6px rgba(52,211,153,.7)}
+
+.reason{font-size:12.5px;color:var(--dim);padding:8px 0;border-bottom:1px solid var(--line);
+  display:flex;gap:8px}
+.reason:last-child{border-bottom:0}
+.reason b{color:var(--text);font-weight:600}
+.reason .t{color:var(--faint);flex:none;font-variant-numeric:tabular-nums}
+
+.win{display:flex;gap:4px;margin-top:8px}
+.win div{flex:1;height:26px;border-radius:5px;display:flex;align-items:center;
+  justify-content:center;font-size:9.5px;font-weight:700;color:#0b1220;opacity:.55}
+.win div.now{opacity:1;outline:2px solid var(--text);outline-offset:1px}
+
+.empty{color:var(--faint);font-size:13px;padding:6px 0}
+.err{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);
+  color:#fecaca;padding:9px 11px;border-radius:10px;font-size:13px;margin:10px 0}
+footer{text-align:center;color:var(--faint);font-size:11.5px;padding:16px 0}
+@media(min-width:680px){.grid3{grid-template-columns:repeat(6,1fr)}}
+</style>
+</head>
+<body>
+<header><div class="hrow">
+  <div class="dot" id="live"></div>
+  <div class="brand">Udyog&nbsp;IQ <span id="site"></span></div>
+  <div class="mode" id="mode">—</div>
+</div></header>
+
+<div class="wrap">
+  <div id="banner"></div>
+
+  <div class="card">
+    <h2>Right now <span class="tag" id="src">—</span></h2>
+    <div class="big" id="loadNow">—<small>W</small></div>
+    <div class="sub" id="nowSub">connecting…</div>
+    <div class="flow" id="flow"></div>
+  </div>
+
+  <div class="card">
+    <h2>Last 6 hours</h2>
+    <canvas id="chart"></canvas>
+  </div>
+
+  <div class="card">
+    <h2>What this device has saved</h2>
+    <div class="grid2">
+      <div class="tile"><div class="k">Saved so far</div>
+        <div class="v" id="savedNow">₹—</div><div class="u" id="savedSub">—</div></div>
+      <div class="tile"><div class="k">Projected / month</div>
+        <div class="v" id="savedMo">₹—</div><div class="u">at this rate</div></div>
+    </div>
+    <div class="grid3" style="margin-top:8px">
+      <div class="tile"><div class="k">CO₂ avoided</div><div class="v" id="co2">—<span class="u"> kg</span></div></div>
+      <div class="tile"><div class="k">Peak demand</div><div class="v" id="pk">—<span class="u"> kVA</span></div></div>
+      <div class="tile"><div class="k">Self-supplied</div><div class="v" id="selfc">—<span class="u">%</span></div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Tariff <span class="tag" id="rateNow">—</span></h2>
+    <div class="win" id="win"></div>
+    <div class="sub" id="tarSub"></div>
+  </div>
+
+  <div class="card">
+    <h2>Machines it found <span class="tag" id="mcount">—</span></h2>
+    <div id="machines"><div class="empty">Still listening…</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Battery plan <span class="tag" id="socTag">—</span></h2>
+    <canvas id="plan" style="height:120px"></canvas>
+    <div class="sub" id="planSub">—</div>
+  </div>
+
+  <div class="card">
+    <h2>Decisions</h2>
+    <div id="decisions"><div class="empty">Nothing to report.</div></div>
+  </div>
+
+  <footer id="foot">Udyog IQ · on-device · nothing leaves this site</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const fmt = (v,d=0) => {
+  if (v==null || isNaN(v)) return '—';
+  // Round first, then clear the sign on a value that rounded to zero. Without
+  // this a saving of -0.001 renders as "₹-0.00", which looks like a bug to
+  // anyone reading it and undermines every other number on the page.
+  let n = Number(v);
+  const r = Number(n.toFixed(d));
+  if (r === 0) n = 0;
+  return n.toLocaleString('en-IN',{minimumFractionDigits:d,maximumFractionDigits:d});
+};
+const rs  = (v,d=0) => '₹' + fmt(v,d);
+const clock = t => t ? new Date(t*1000).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}) : '—';
+
+let hist = [];      // recent load history for the sparkline
+let lastPlan = null;
+
+/* ------------------------------------------------------------------ */
+function render(s){
+  const L = s.live || {};
+  $('live').classList.toggle('on', !!(s.acquisition && s.acquisition.online));
+  $('site').textContent = s.site || '';
+  $('src').textContent  = (L.source||'—') + (L.valid ? '' : ' · stale');
+
+  const mode = (s.policy && s.policy.mode) || '—';
+  const m = $('mode'); m.textContent = mode; m.classList.toggle('active', mode === 'active');
+
+  // --- right now ---
+  $('loadNow').innerHTML = fmt(L.load_w) + '<small>W</small>';
+  $('nowSub').textContent =
+    `${fmt(L.voltage_v,1)} V · ${fmt(L.current_a,2)} A · PF ${fmt(L.power_factor,2)} · ${fmt(L.frequency_hz,2)} Hz`;
+
+  // Four flows on one shared scale so the picture reads without the numbers.
+  const rows = [
+    ['Load',  L.load_w,    'var(--load)'],
+    ['Solar', L.solar_w,   'var(--solar)'],
+    ['Grid',  L.grid_w,    'var(--grid)'],
+    ['Battery', L.battery_w,'var(--batt)'],
+  ];
+  const scale = Math.max(500, ...rows.map(r => Math.abs(r[1]||0)));
+  $('flow').innerHTML = rows.map(([k,v,c])=>{
+    v = v||0;
+    const w = Math.min(50, Math.abs(v)/scale*50);
+    const left = v >= 0 ? 50 : 50 - w;
+    return `<div class="fr"><div class="lbl">${k}</div>
+      <div class="bar"><span class="zero"></span><i style="left:${left}%;width:${w}%;background:${c}"></i></div>
+      <div class="val">${v>0?'+':''}${fmt(v)} W</div></div>`;
+  }).join('');
+
+  // --- savings ---
+  const sv = s.savings || {};
+  $('savedNow').textContent = rs(sv.total_saving_inr, 2);
+  $('savedSub').textContent = `over ${fmt(sv.days_observed,2)} days`;
+  $('savedMo').textContent  = rs(sv.projected_monthly_inr, 0);
+  $('co2').innerHTML  = fmt(sv.co2_saved_kg,1) + '<span class="u"> kg</span>';
+  const dm = s.demand || {};
+  $('pk').innerHTML   = fmt(dm.billing_peak_kva,2) + '<span class="u"> kVA</span>';
+  const acc = (s.accounting && s.accounting.today) || {};
+  $('selfc').innerHTML = fmt(acc.self_consumption_pct,0) + '<span class="u">%</span>';
+
+  // --- tariff windows ---
+  const t = s.tariff || {};
+  if (t.now) $('rateNow').textContent = `₹${fmt(t.now.rate_inr_per_kwh,2)}/kWh · ${t.now.window}`;
+  if (t.windows){
+    const hue = mul => mul < .95 ? '#34d399' : (mul < 1.1 ? '#fbbf24' : '#f87171');
+    $('win').innerHTML = t.windows.map(w =>
+      `<div class="${t.now && w.name===t.now.window?'now':''}" style="background:${hue(w.multiplier)}">
+         ${String(w.start_hour).padStart(2,'0')}–${String(w.end_hour).padStart(2,'0')}</div>`).join('');
+    const sp = t.spread || {};
+    $('tarSub').textContent =
+      `Spread ₹${fmt(sp.spread_inr_per_kwh,2)}/kWh · battery breakeven ₹${fmt((s.battery&&s.battery.spec&&s.battery.spec.breakeven_spread_inr_per_kwh),2)}/kWh`;
+  }
+
+  // --- machines ---
+  const apps = (s.nilm && s.nilm.appliances) || [];
+  const hb = {}; (s.health||[]).forEach(h => hb[h.appliance_id] = h);
+  $('mcount').textContent = `${apps.length} found · ${(s.nilm&&s.nilm.candidate_count)||0} candidates`;
+  $('machines').innerHTML = apps.length ? apps.map(a=>{
+    const h = hb[a.id] || {};
+    const hs = h.trained ? h.health_score : null;
+    const cls = hs==null ? 'idle' : (h.alert_active || hs<40 ? 'bad' : (hs<70 ? 'warn' : 'ok'));
+    const txt = hs==null ? 'learning' : fmt(hs,0);
+    return `<div class="mach">
+      <div class="onled ${a.is_on?'on':''}"></div>
+      <div><div class="nm">${a.label}</div>
+        <div class="mt">${fmt(a.mean_dp)} W · ${a.kind} · ${fmt(a.cycles)} cycles · ${fmt(a.total_energy_wh/1000,1)} kWh</div></div>
+      <div class="rt"><span class="pill ${cls}">${txt}</span></div></div>`;
+  }).join('') : '<div class="empty">Still listening. Machines appear once they have switched a few times.</div>';
+
+  // --- battery plan ---
+  const b = s.battery || {};
+  $('socTag').textContent = `SoC ${fmt(b.soc_pct,0)}%`;
+  const d = s.dispatch;
+  if (d){
+    lastPlan = d;
+    $('planSub').textContent = d.actions && d.actions.length
+      ? `${d.actions[0].reason} · plan saves ₹${fmt(d.saving_inr,2)} over 24 h · solved in ${fmt(d.solve_ms,1)} ms`
+      : 'No plan yet.';
+  }
+
+  // --- decisions ---
+  const dec = s.decisions || [];
+  $('decisions').innerHTML = dec.length ? dec.slice(0,8).map(x=>
+    `<div class="reason"><span class="t">${clock(x.timestamp)}</span>
+      <span><b>${x.outcome==='executed'?'Did':(x.outcome==='advised'?'Would':'Tried')}</b> ${x.reason}</span></div>`
+  ).join('') : '<div class="empty">Nothing needed doing yet.</div>';
+
+  // --- banner for real problems only ---
+  const a = s.acquisition||{};
+  $('banner').innerHTML = (!a.online && a.last_error)
+    ? `<div class="err"><b>Meter not responding.</b> ${a.last_error}</div>` : '';
+
+  $('foot').textContent =
+    `${fmt(a.samples)} samples · ${fmt((a.success_rate||0)*100,1)}% good · uptime ${fmt(s.uptime_s/3600,1)} h · nothing leaves this site`;
+
+  hist.push(L.load_w||0); if (hist.length > 240) hist.shift();
+  drawLine($('chart'), hist, '#60a5fa');
+  if (lastPlan && lastPlan.actions) drawPlan($('plan'), lastPlan.actions);
+}
+
+/* ------------------------------------------------------------------ */
+function prep(cv){
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== w*dpr || cv.height !== h*dpr){ cv.width = w*dpr; cv.height = h*dpr; }
+  const x = cv.getContext('2d'); x.setTransform(dpr,0,0,dpr,0,0); x.clearRect(0,0,w,h);
+  return [x,w,h];
+}
+
+function drawLine(cv, data, colour){
+  const [x,w,h] = prep(cv);
+  if (data.length < 2){ x.fillStyle='#5d719a'; x.font='12px system-ui';
+    x.fillText('collecting…',8,20); return; }
+  const max = Math.max(...data)*1.15 || 1, pad = 6;
+  const px = i => i/(data.length-1)*w;
+  const py = v => h-pad - (v/max)*(h-pad*2);
+  const g = x.createLinearGradient(0,0,0,h);
+  g.addColorStop(0, colour+'55'); g.addColorStop(1, colour+'00');
+  x.beginPath(); x.moveTo(0,h);
+  data.forEach((v,i)=>x.lineTo(px(i),py(v))); x.lineTo(w,h); x.closePath();
+  x.fillStyle=g; x.fill();
+  x.beginPath(); data.forEach((v,i)=> i?x.lineTo(px(i),py(v)):x.moveTo(px(i),py(v)));
+  x.strokeStyle=colour; x.lineWidth=2; x.lineJoin='round'; x.stroke();
+  x.fillStyle='#5d719a'; x.font='11px system-ui';
+  x.fillText(fmt(max)+' W', 6, 13);
+}
+
+function drawPlan(cv, actions){
+  const [x,w,h] = prep(cv);
+  const n = Math.min(actions.length, 96); if (!n) return;
+  const bw = w/n, mid = h/2;
+  const peak = Math.max(1, ...actions.slice(0,n).map(a=>Math.abs(a.battery_w)));
+  // Rate strip along the top, so the plan can be read against the price that
+  // drove it rather than in isolation.
+  const rates = actions.slice(0,n).map(a=>a.import_rate);
+  const rmin = Math.min(...rates), rmax = Math.max(...rates);
+  for (let i=0;i<n;i++){
+    const f = rmax>rmin ? (rates[i]-rmin)/(rmax-rmin) : 0;
+    x.fillStyle = `rgba(${Math.round(96+120*f)},${Math.round(165-70*f)},${Math.round(250-160*f)},.30)`;
+    x.fillRect(i*bw, 0, bw+.5, 9);
+  }
+  x.strokeStyle='#243250'; x.beginPath(); x.moveTo(0,mid); x.lineTo(w,mid); x.stroke();
+  for (let i=0;i<n;i++){
+    const v = actions[i].battery_w, bh = Math.abs(v)/peak*(mid-14);
+    if (bh < .6) continue;
+    x.fillStyle = v>0 ? '#a78bfa' : '#34d399';
+    if (v>0) x.fillRect(i*bw, mid-bh, Math.max(bw-.5,1), bh);
+    else     x.fillRect(i*bw, mid,    Math.max(bw-.5,1), bh);
+  }
+  x.fillStyle='#5d719a'; x.font='10px system-ui';
+  x.fillText('discharge', 4, mid-4); x.fillText('charge', 4, mid+12);
+  x.fillText('next 24 h', w-52, h-3);
+}
+
+/* ------------------------------------------------------------------ */
+let ws, retry = 0;
+function connect(){
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws`);
+  ws.onopen    = () => { retry = 0; };
+  ws.onmessage = e => { try { render(JSON.parse(e.data)); } catch(err){ console.error(err); } };
+  ws.onclose   = () => {
+    $('live').classList.remove('on');
+    // Back off rather than hammering a board that may be busy, but never give
+    // up: this page lives on a wall tablet for months.
+    retry = Math.min(retry+1, 6);
+    setTimeout(connect, 500 * 2**retry);
+  };
+  ws.onerror = () => ws.close();
+}
+connect();
+
+// One immediate REST fetch so the page has content before the first push.
+fetch('/api/snapshot').then(r=>r.json()).then(render).catch(()=>{});
+window.addEventListener('resize', () => {
+  drawLine($('chart'), hist, '#60a5fa');
+  if (lastPlan && lastPlan.actions) drawPlan($('plan'), lastPlan.actions);
+});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/static/sw.js').catch(()=>{});
+</script>
+</body>
+</html>

@@ -41,7 +41,13 @@ class SimulatedMeter(MeterTransport):
         self._latest: dict[str, float] = {}
 
     def open(self) -> None:
+        # Re-anchor both clocks to now. The object may have been constructed
+        # long before acquisition starts - a warm-up replay takes the better
+        # part of a minute - and leaving the simulated origin back at
+        # construction time makes every live frame arrive already stale, which
+        # the health endpoint correctly refuses to call healthy.
         self._wall_start = time.time()
+        self._sim_start = self._wall_start
 
     def close(self) -> None:
         pass

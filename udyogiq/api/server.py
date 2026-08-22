@@ -17,7 +17,17 @@ ever gains a route from outside, it needs a reverse proxy with auth in front,
 and that is documented rather than half-implemented here.
 """
 
-from __future__ import annotations
+# NOTE: deliberately no "from __future__ import annotations" in this module.
+#
+# FastAPI resolves parameter types at runtime with typing.get_type_hints().
+# Deferred annotations turn them into strings, and the FastAPI imports here are
+# function-local (so the package still imports on a machine without fastapi
+# installed, which keeps the models testable). get_type_hints() then cannot see
+# the local name and falls back to treating the parameter as a query field, so
+# the WebSocket route rejected every handshake with
+#   403  {'loc': ['query', 'ws'], 'msg': 'Field required'}
+# and the dashboard silently ran on its single startup REST fetch, never
+# updating. Evaluating annotations eagerly resolves WebSocket to the real class.
 
 import asyncio
 import json

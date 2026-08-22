@@ -1,0 +1,19 @@
+{
+  "name": "Udyog IQ",
+  "short_name": "Udyog IQ",
+  "description": "Edge AI energy intelligence for small industry",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "icons": [
+    {
+      "src": "/static/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
