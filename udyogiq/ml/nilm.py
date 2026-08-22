@@ -221,6 +221,10 @@ class DiscoveredAppliance:
 class NILMEngine:
     """Discovers and tracks appliances from a stream of edges."""
 
+    #: Smallest step that may found a new appliance. Existing clusters still
+    #: accept smaller edges; this only governs creation.
+    min_cluster_w: float = 60.0
+
     def __init__(self, cfg=None) -> None:
         self.cfg = cfg or CONFIG.learning
         self.appliances: list[DiscoveredAppliance] = []
@@ -272,6 +276,12 @@ class NILMEngine:
             if d < best_d:
                 best_d, best = d, app
 
+        if best is None and abs(edge.delta_p) < self.min_cluster_w:
+            # Too small to be worth a cluster of its own. Creating one for
+            # every marginal step is how the appliance list fills with 45 W
+            # phantoms that never confirm but do consume slots.
+            return None
+
         if best is None:
             if len(self.appliances) >= self.cfg.max_appliances:
                 # Out of slots: park it for consolidation rather than forcing a
@@ -284,6 +294,32 @@ class NILMEngine:
         best.absorb(edge)
         self._apply_state(best, edge)
         return best
+
+    def expire_stale(self, now: float) -> int:
+        """
+        Mark machines off when their stop event was clearly missed.
+
+        The detector loses an edge whenever a machine switches while a larger
+        one is masking it, and a missed stop leaves an appliance believed to be
+        running forever. That poisons the residual - it was measured at
+        -3781 W after a seven day replay, meaning the model thought nearly four
+        kilowatts more was running than the meter could see - and it inflates
+        runtime and energy for every machine it happens to.
+
+        A machine that has been on for far longer than it has ever run before
+        is the signature of a lost edge, not of a long shift, so we close the
+        cycle without crediting energy we cannot vouch for.
+        """
+        closed = 0
+        for app in self.appliances:
+            if not app.is_on or not app.last_on_t:
+                continue
+            typical = app.mean_run_s or 1800.0
+            if (now - app.last_on_t) > max(4.0 * typical, 6 * 3600.0):
+                app.is_on = False
+                app.last_off_t = now
+                closed += 1
+        return closed
 
     def _apply_state(self, app: DiscoveredAppliance, edge: Edge) -> None:
         """Update on/off state and accumulate runtime and energy."""
@@ -318,7 +354,7 @@ class NILMEngine:
             return 0
         self._last_consolidate = now
 
-        merges = 0
+        merges = self.expire_stale(now)
         changed = True
         while changed:
             changed = False

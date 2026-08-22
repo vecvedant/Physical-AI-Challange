@@ -53,6 +53,13 @@ class MeterConfig:
     # 9600 baud: 17 floats = 34 registers ~= 80 bytes round trip.
     sample_hz: float = 1.0
 
+    # Where the meter physically sits. "grid_tie" reads import/export after
+    # solar and battery have netted off; "load_side" reads plant consumption
+    # directly. Load-side is strongly preferred where the wiring allows it,
+    # because disaggregation on a grid-tie signal has to contend with
+    # generation moving independently of the machines.
+    meter_position: str = "grid_tie"
+
     # Word order for 32-bit floats.  Selec ships big-endian words; some units in
     # the field are byte-swapped, so the probe tool can flip this.
     word_order: str = "big"
@@ -106,7 +113,13 @@ class LearningConfig:
     baseline_minutes: int = 60
 
     # NILM: max distinct appliances we will try to discover from one meter.
-    max_appliances: int = 8
+    #
+    # Generous on purpose. When the list is full, an unmatched edge is parked
+    # rather than clustered, consolidation later frees a slot, and a new
+    # cluster forms for the same machine - churn that produced about forty
+    # clusters for seven real machines over a week-long replay. Headroom is far
+    # cheaper than that cycle.
+    max_appliances: int = 16
     # Two power steps are the same appliance if they agree within this band.
     #
     # 0.10 was chosen by sweeping against simulator ground truth. At 0.15 the
