@@ -5,6 +5,8 @@ config.local.json
 data/*.db
 data/*.db-journal
 data/*.db-wal
+data/*.log
+data/*.err
 data/models/*.joblib
 data/models/*.json
 data/recordings/*.csv
