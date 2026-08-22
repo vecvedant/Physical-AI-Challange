@@ -74,8 +74,17 @@ class PipelineConfig:
     long_window_s: int = 300
 
     # Change-point detection: a step is "real" if active power moves by more
-    # than this and then holds for `settle_s`.
-    edge_threshold_w: float = 25.0
+    # than the detection threshold and then holds for `settle_s`.
+    #
+    # The threshold is adaptive, not fixed.  A fixed value cannot work: a
+    # 2.2 kW lathe with 6% ripple swings +/-130 W while doing nothing unusual,
+    # so a threshold low enough to catch a 40 W load being switched at night
+    # would fire hundreds of times an hour during the day.  We therefore take
+    # the larger of an absolute floor and a multiple of the locally observed
+    # noise, which lets the same detector work at both ends of the range.
+    edge_threshold_w: float = 25.0          # absolute floor
+    edge_sigma_multiplier: float = 5.0      # ... or this many local sigmas
+    noise_ewma_alpha: float = 0.02          # how fast the noise estimate adapts
     settle_s: int = 3
 
     # Power below this is treated as "off" rather than a tiny load.
