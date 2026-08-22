@@ -108,8 +108,15 @@ class LearningConfig:
     # NILM: max distinct appliances we will try to discover from one meter.
     max_appliances: int = 8
     # Two power steps are the same appliance if they agree within this band.
+    #
+    # 0.10 was chosen by sweeping against simulator ground truth. At 0.15 the
+    # 1350 W coolant pump falls inside the 1500 W compressor's band and the two
+    # merge into one phantom machine; at 0.06 the lathe splits across several
+    # clusters and none of the fragments reaches confirmation. The band has to
+    # be proportional as well as absolute, because a fixed watt tolerance is
+    # simultaneously too tight for a 2 kW machine and too loose for a 100 W one.
     cluster_tolerance_w: float = 40.0
-    cluster_tolerance_frac: float = 0.15
+    cluster_tolerance_frac: float = 0.10
     # An appliance must be seen this many times before we trust it.
     min_observations: int = 3
 
