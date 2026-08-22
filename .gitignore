@@ -1,0 +1,39 @@
+# Site-specific configuration (tariffs, panel geometry, serial ports)
+config.local.json
+
+# Runtime data
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/models/*.joblib
+data/models/*.json
+data/recordings/*.csv
+data/recordings/*.parquet
+data/cache/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Arduino / App Lab build output
+sketch/build/
+sketch/.build/
+*.elf
+*.bin
+*.hex
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Report intermediates
+docs/report/~$*.docx

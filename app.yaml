@@ -1,0 +1,18 @@
+name: Udyog IQ
+description: >-
+  Edge AI energy intelligence for small industry. One energy meter, an Arduino
+  UNO Q, and no cloud: the node discovers which machines exist from a single
+  aggregate signal, learns their healthy signatures without labels, forecasts
+  solar generation and plant load, and schedules battery / solar / grid against
+  time-of-day tariffs to cut the electricity bill.
+icon: ⚡
+version: "2.0.0"
+
+# The dashboard is a mobile-first PWA served straight off the MPU, so the port
+# has to be reachable from the LAN.
+ports:
+  - 8080
+
+# No pre-built Bricks: every model in this project is trained on-site from the
+# plant's own unlabelled stream, so there is nothing to pull in.
+bricks: []

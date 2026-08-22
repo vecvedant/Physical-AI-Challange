@@ -1,0 +1,23 @@
+# Runtime dependencies for the MPU (Debian arm64) side of Udyog IQ.
+#
+# Deliberately conservative: everything here has a prebuilt aarch64 wheel on
+# PyPI, so a fresh UNO Q installs the whole stack without a compiler.  XGBoost
+# is *not* used anywhere - scikit-learn's HistGradientBoostingRegressor is the
+# same algorithm family and avoids a from-source build on the board.
+
+numpy>=1.26,<3
+scipy>=1.11
+scikit-learn>=1.4
+pandas>=2.1
+joblib>=1.3
+
+fastapi>=0.110
+uvicorn[standard]>=0.27
+websockets>=12.0
+
+# Modbus RTU master, only needed when meter.transport == "serial".
+pymodbus>=3.6
+pyserial>=3.5
+
+# HTTP client for the Open-Meteo forecast fetch.
+httpx>=0.26
