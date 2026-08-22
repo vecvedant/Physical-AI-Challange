@@ -168,21 +168,34 @@ class DiscoveredAppliance:
         # Normalised so P and Q contribute comparably despite different scales.
         return math.hypot((dp - cp) / tol_p, (dq - cq) / tol_q)
 
+    #: Floor on the centroid update rate.  A pure running mean stops moving
+    #: once a cluster has hundreds of observations, and that breaks machine
+    #: identity: as a motor degrades it draws more power and worse power
+    #: factor, drifts outside its own cluster's tolerance, and gets filed as a
+    #: brand-new appliance - taking its health history with it. Keeping a floor
+    #: under the learning rate lets a confirmed cluster follow its machine as
+    #: it ages, which is exactly the behaviour we want, while the health model
+    #: keeps comparing against its frozen original baseline.
+    DRIFT_ALPHA: float = 0.03
+
     def absorb(self, edge: Edge) -> None:
-        """Fold an edge into the cluster (Welford, so no history is retained)."""
+        """Fold an edge into the cluster, letting the centroid track slow drift."""
         dp, dq = abs(edge.delta_p), abs(edge.delta_q)
         self.observations += 1
         n = self.observations
+        alpha = max(1.0 / n, self.DRIFT_ALPHA)
 
         delta = dp - abs(self.mean_dp)
-        self.mean_dp = math.copysign(abs(self.mean_dp) + delta / n, 1.0)
-        self.m2_dp += delta * (dp - self.mean_dp)
+        self.mean_dp = abs(self.mean_dp) + alpha * delta
+        # Welford's update is no longer exact once alpha is floored, so this
+        # tracks a decaying spread instead. It is only used for display.
+        self.m2_dp = (1 - alpha) * self.m2_dp + alpha * delta * delta * max(1, n - 1) / max(1, n)
 
-        self.mean_dq += (dq - self.mean_dq) / n
+        self.mean_dq += alpha * (dq - self.mean_dq)
         if edge.type is EdgeType.RISE:
             self.rise_count += 1
-            # Inrush is only meaningful on a start.
-            self.mean_inrush += (edge.inrush_ratio - self.mean_inrush) / max(1, self.rise_count)
+            r_alpha = max(1.0 / max(1, self.rise_count), self.DRIFT_ALPHA)
+            self.mean_inrush += r_alpha * (edge.inrush_ratio - self.mean_inrush)
         else:
             self.fall_count += 1
 
