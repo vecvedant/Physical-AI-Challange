@@ -2,7 +2,7 @@ const fs = require("fs");
 const {
   Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType,
   Table, TableRow, TableCell, WidthType, ShadingType, BorderStyle,
-  LevelFormat, PageBreak, convertInchesToTwip,
+  LevelFormat, PageBreak, convertInchesToTwip, ImageRun,
 } = require("docx");
 
 /* ------------------------------------------------------------------ */
@@ -179,6 +179,23 @@ const PLACEHOLDER = (text, height) => new Table({
 
 const SPACER = (h) => new Paragraph({ spacing: { after: h || 160 }, children: [] });
 
+const DIAGRAMS = "D:/AI-Challange/Physical-AI-Challange/docs/diagrams";
+
+/** Full content width figure. 6.5in at 96 dpi is 624 px. */
+const FIGURE = (file, aspect, caption) => [
+  new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { before: 60, after: 60 },
+    children: [new ImageRun({
+      data: fs.readFileSync(`${DIAGRAMS}/${file}`),
+      type: "png",
+      transformation: { width: 624, height: Math.round(624 / aspect) },
+    })],
+  }),
+  PR([[caption, { size: 17, color: MUTED, italics: true }]],
+    { align: AlignmentType.CENTER, after: 140 }),
+];
+
 /* ================================================================== */
 const doc = new Document({
   creator: "Vedant Charegaonkar",
@@ -343,22 +360,14 @@ const doc = new Document({
 
       SPACER(160),
       H2("Block Diagram"),
-      MONO("   Selec EM2M  >> RS485 >>  +================================+"),
-      MONO("   100 A, 1 phase           |  STM32U585   (real time)       |"),
-      MONO("   Modbus RTU               |   Modbus master, 1 Hz          |"),
-      MONO("                            |   contactor interlock          |"),
-      MONO("                            |   watchdog, fail safe closed   |"),
-      MONO("                            +================+===============+"),
-      MONO("                                             | Bridge RPC"),
-      MONO("                            +================+===============+"),
-      MONO("   Open-Meteo  >>  cache >> |  QRB2210 / Debian              |"),
-      MONO("   (optional, offline OK)   |   pipeline, disaggregation     |"),
-      MONO("                            |   health, forecasts            |"),
-      MONO("                            |   dispatch optimiser, ledger   |"),
-      MONO("                            |   SQLite historian, FastAPI    |"),
-      MONO("                            +================+===============+"),
-      MONO("                                             | LAN only"),
-      MONO("                       contactor  <<=========+=========>>  dashboard"),
+      P("The whole installation, not only the controller. Power runs left to " +
+        "right along the top: the three sources meet at the inverter, pass " +
+        "through the meter, pass through the contactor, and reach the machines. " +
+        "The contactor really is in series there. The node sits underneath and " +
+        "touches the power path at exactly two points, reading the meter and " +
+        "commanding the contactor."),
+      ...FIGURE("system_block_diagram.png", 2272 / 1255,
+        "Figure 1. Udyog IQ system block diagram. Thick arrows carry power, thin dashed arrows carry signals."),
       SPACER(180),
 
       H2("Circuit and Wiring"),
@@ -380,6 +389,9 @@ const doc = new Document({
         "mastered by Linux over a USB to RS485 adapter, or simulated. Whichever way the bring up lands, it is a " +
         "one line change rather than a rewrite.",
       ]),
+      SPACER(140),
+      ...FIGURE("wiring_diagram.png", 2207 / 964,
+        "Figure 2. Circuit detail. The isolation barrier is the important part: the meter terminals sit at mains potential and the board does not."),
       SPACER(120),
       PLACEHOLDER("[ Insert photograph of the assembled hardware: UNO Q, meter, isolated RS485 converter and contactor on DIN rail ]", 2100),
 
