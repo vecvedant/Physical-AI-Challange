@@ -5,8 +5,10 @@ config.local.json
 data/*.db
 data/*.db-journal
 data/*.db-wal
+data/*.db-shm
 data/*.log
 data/*.err
+data/weather_cache.json
 data/models/*.joblib
 data/models/*.json
 data/recordings/*.csv
