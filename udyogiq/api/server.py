@@ -51,6 +51,29 @@ def build_app(node) -> Any:
 
     app = FastAPI(title="Udyog IQ", version="2.0.0", docs_url="/api/docs")
 
+    @app.middleware("http")
+    async def _no_stale_shell(request, call_next):
+        """
+        Make the browser revalidate the dashboard shell on every load.
+
+        Found by changing the theme and watching a *fresh tab* still render the
+        old one: the page had come from the HTTP cache while the server was
+        serving the new file. On a laptop that is a confusing minute; on a
+        deployed node it means every phone that has ever opened the dashboard
+        keeps showing a stale UI after an update, with no obvious way for the
+        operator to force it.
+
+        Only the shell and the worker are marked no-cache. Hashed-content assets
+        would be fine to cache hard, and API responses are already uncacheable.
+        Offline support is the service worker's job, not the HTTP cache's - and
+        the worker deliberately refuses to serve stale live data.
+        """
+        response = await call_next(request)
+        path = request.url.path
+        if path == "/" or path.endswith((".html", "/sw.js", ".webmanifest")):
+            response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return response
+
     # ------------------------------------------------------------------ #
     @app.get("/api/snapshot")
     def snapshot() -> JSONResponse:

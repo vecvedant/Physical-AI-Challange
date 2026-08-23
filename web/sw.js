@@ -6,7 +6,7 @@
  * the shell is cached, so the page loads instantly on a phone that has been
  * here before and then fills itself from the live socket.
  */
-const SHELL = 'udyogiq-shell-v2';
+const SHELL = 'udyogiq-shell-v3';
 const ASSETS = ['/', '/static/manifest.webmanifest', '/static/icon.svg'];
 
 self.addEventListener('install', e => {
