@@ -69,9 +69,29 @@ header{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.92);
 .dot{width:9px;height:9px;border-radius:50%;background:transparent;flex:none;
   border:2px solid var(--faint);box-sizing:border-box}
 .dot.on{background:var(--text);border-color:var(--text)}
-.mode{margin-left:auto;font-size:11px;letter-spacing:.6px;text-transform:uppercase;
+.mode{font-size:11px;letter-spacing:.6px;text-transform:uppercase;
   color:var(--dim);border:1px solid var(--line);padding:4px 9px;border-radius:999px}
 .mode.active{color:#fff;background:var(--text);border-color:var(--text)}
+
+/* View tabs. Hash-routed so a view is linkable and survives a reload, which
+   matters when the dashboard is pinned to a wall tablet that should come back
+   to the same page after a power cut. */
+nav{margin-left:auto;display:flex;gap:4px}
+nav a{font-size:12px;font-weight:600;color:var(--dim);text-decoration:none;
+  padding:5px 11px;border-radius:999px;border:1px solid transparent;white-space:nowrap}
+nav a.sel{color:var(--text);background:var(--panel-2);border-color:var(--line)}
+/* display:contents so the cards stay direct grid items of .deck and keep
+   their column spans; a wrapper div with its own display would collapse the
+   whole layout to one column. */
+.view{display:none}
+.view.sel{display:contents}
+
+/* Legend for the forecast charts, since monochrome needs naming. */
+.leg{display:flex;flex-wrap:wrap;gap:12px;margin-top:9px;font-size:11.5px;color:var(--dim)}
+.leg i{display:inline-block;width:16px;height:3px;border-radius:2px;margin-right:5px;
+  vertical-align:middle}
+.leg i.dash{height:0;border-top:2px dashed var(--dim)}
+.leg i.box{height:9px;width:9px;border-radius:2px}
 
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
   padding:14px;margin:0;min-width:0}
@@ -200,13 +220,19 @@ footer{grid-column:span 12;text-align:center;color:var(--faint);font-size:11.5px
 <body>
 <header><div class="hrow">
   <div class="dot" id="live"></div>
-  <div class="brand">Udyog&nbsp;IQ <span id="site"></span></div>
+  <div class="brand">Udyog&nbsp;IQ</div>
   <div class="mode" id="mode">—</div>
+  <nav>
+    <a href="#/overview" id="navOverview">Overview</a>
+    <a href="#/forecast" id="navForecast">Forecast</a>
+  </nav>
 </div></header>
 
 <div class="wrap">
  <div class="deck">
   <div id="banner"></div>
+
+  <div class="view sel" id="viewOverview">
 
   <div class="card c-now">
     <h2>Right now <span class="tag" id="src">—</span></h2>
@@ -257,12 +283,84 @@ footer{grid-column:span 12;text-align:center;color:var(--faint);font-size:11.5px
     <div class="scroller" id="decisions"><div class="empty">Nothing to report.</div></div>
   </div>
 
+  </div><!-- /overview -->
+
+  <div class="view" id="viewForecast">
+
+    <div class="card c-chart">
+      <h2>Next 24 hours <span class="tag" id="fcTag">—</span></h2>
+      <canvas id="fcMain"></canvas>
+      <div class="leg">
+        <span><i style="background:#09090b"></i>Forecast load</span>
+        <span><i style="background:#8b8b93"></i>Expected solar</span>
+        <span><i class="dash"></i>Grid draw after dispatch</span>
+        <span><i class="box" style="background:#e4e4e7;border:1px solid #a1a1aa"></i>Peak tariff</span>
+      </div>
+      <div class="sub" id="fcSub">—</div>
+    </div>
+
+    <div class="card c-now">
+      <h2>Day ahead</h2>
+      <div class="big" id="fcPeak">—<small>W peak</small></div>
+      <div class="sub" id="fcPeakWhen">—</div>
+      <div class="flow" id="fcTotals"></div>
+    </div>
+
+    <div class="card c-batt">
+      <h2>Battery schedule <span class="tag" id="fcSoc">—</span></h2>
+      <canvas id="fcPlan"></canvas>
+      <div class="leg">
+        <span><i style="background:#09090b"></i>Discharge</span>
+        <span><i class="box" style="background:#e4e4e7;border:1px solid #09090b"></i>Charge</span>
+        <span><i class="dash"></i>State of charge</span>
+      </div>
+      <div class="sub" id="fcPlanSub">—</div>
+    </div>
+
+    <div class="card c-save">
+      <h2>What the plan is worth</h2>
+      <div class="grid2">
+        <div class="tile"><div class="k">Plan cost, 24 h</div>
+          <div class="v" id="fcCost">₹—</div><div class="u">incl. battery wear</div></div>
+        <div class="tile"><div class="k">Without the battery</div>
+          <div class="v" id="fcBase">₹—</div><div class="u">same load, same solar</div></div>
+      </div>
+      <div class="grid3" style="margin-top:8px">
+        <div class="tile"><div class="k">Saving</div><div class="v" id="fcSave">₹—</div></div>
+        <div class="tile"><div class="k">Cycled</div><div class="v" id="fcThru">—<span class="u"> kWh</span></div></div>
+        <div class="tile"><div class="k">Solved in</div><div class="v" id="fcMs">—<span class="u"> ms</span></div></div>
+      </div>
+      <div class="sub" id="fcWhy">—</div>
+    </div>
+
+    <div class="card c-tariff">
+      <h2>Model status</h2>
+      <div id="fcModels"><div class="empty">Loading…</div></div>
+    </div>
+
+    <div class="card c-mach">
+      <h2>Load forecast by horizon <span class="tag" id="fcHzTag">—</span></h2>
+      <div class="scroller" id="fcHorizons"><div class="empty">Not trained yet.</div></div>
+    </div>
+
+    <div class="card c-dec">
+      <h2>Planned actions</h2>
+      <div class="scroller" id="fcActions"><div class="empty">No plan yet.</div></div>
+    </div>
+
+  </div><!-- /forecast -->
+
   <footer id="foot">Udyog IQ · on-device · nothing leaves this site</footer>
  </div>
 </div>
 
 <script>
-const $ = id => document.getElementById(id);
+// Returns a harmless stand-in rather than null when an element is missing, so
+// a stale id cannot abort the whole render pass. Removing <span id="site"> from
+// the header while render() still wrote to it threw on the first line and left
+// every panel on the page blank, which is a lot of collateral for one typo.
+const NULL_NODE = { classList:{toggle(){},add(){},remove(){},contains(){return false}} };
+const $ = id => document.getElementById(id) || Object.create(NULL_NODE);
 const fmt = (v,d=0) => {
   if (v==null || isNaN(v)) return '—';
   // Round first, then clear the sign on a value that rounded to zero. Without
@@ -281,9 +379,9 @@ let lastPlan = null;
 
 /* ------------------------------------------------------------------ */
 function render(s){
+  lastSnap = s;
   const L = s.live || {};
   $('live').classList.toggle('on', !!(s.acquisition && s.acquisition.online));
-  $('site').textContent = s.site || '';
   $('src').textContent  = (L.source||'—') + (L.valid ? '' : ' · stale');
 
   const mode = (s.policy && s.policy.mode) || '—';
@@ -391,11 +489,16 @@ function render(s){
     ? `<div class="err"><b>Meter not responding.</b> ${a.last_error}</div>` : '';
 
   $('foot').textContent =
-    `${fmt(a.samples)} samples · ${fmt((a.success_rate||0)*100,1)}% good · uptime ${fmt(s.uptime_s/3600,1)} h · nothing leaves this site`;
+    `${s.site||'Udyog IQ'} · ${fmt(a.samples)} samples · ${fmt((a.success_rate||0)*100,1)}% good · uptime ${fmt(s.uptime_s/3600,1)} h · nothing leaves this site`;
 
   hist.push(L.load_w||0); if (hist.length > 240) hist.shift();
-  drawLine($('chart'), hist, '#09090b');
-  if (lastPlan && lastPlan.actions) drawPlan($('plan'), lastPlan.actions);
+  // A hidden canvas has zero size, so drawing into it silently produces
+  // nothing and the chart stays blank when the view is switched back.
+  if ($('viewOverview').classList.contains('sel')){
+    drawLine($('chart'), hist, '#09090b');
+    if (lastPlan && lastPlan.actions) drawPlan($('plan'), lastPlan.actions);
+  }
+  renderForecast(s);
 }
 
 /* ------------------------------------------------------------------ */
@@ -460,6 +563,188 @@ function drawPlan(cv, actions){
 }
 
 /* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+/* Forecast view                                                        */
+/* ------------------------------------------------------------------ */
+let lastSnap = null;
+// Horizon predictions live outside the snapshot. They are fetched on their own
+// slower cadence, and hanging them on lastSnap did not work: the socket
+// replaces that object once a second, so they were wiped before they could be
+// drawn even once.
+let horizons = [];
+
+function renderForecast(s){
+  const d = s.dispatch;
+  const a = (d && d.actions) || [];
+  if (!a.length){
+    $('fcSub').textContent = 'Waiting for the first plan.';
+    return;
+  }
+
+  const mins = (s.dispatch && s.dispatch.block_minutes) || 15;
+  const hours = a.length * 15 / 60;
+  $('fcTag').textContent = `${a.length} blocks · ${fmt(hours,0)} h`;
+
+  // Peak of the forecast load, and when.
+  let peak = a[0], loadKwh = 0, solarKwh = 0, gridKwh = 0, thru = 0;
+  a.forEach(x=>{
+    if (x.expected_load_w > peak.expected_load_w) peak = x;
+    loadKwh  += x.expected_load_w  * 0.25 / 1000;
+    solarKwh += x.expected_solar_w * 0.25 / 1000;
+    gridKwh  += Math.max(0, x.expected_grid_w) * 0.25 / 1000;
+    thru     += Math.abs(x.battery_w) * 0.25 / 1000;
+  });
+  $('fcPeak').innerHTML = fmt(peak.expected_load_w) + '<small>W peak</small>';
+  $('fcPeakWhen').textContent = 'expected around ' + clock(peak.timestamp);
+
+  const totals = [
+    ['Load',  loadKwh,  'var(--load)'],
+    ['Grid',  gridKwh,  'var(--grid)'],
+    ['Solar', solarKwh, 'var(--solar)'],
+  ];
+  const tmax = Math.max(0.001, ...totals.map(t=>t[1]));
+  $('fcTotals').innerHTML = totals.map(([k,v,c])=>
+    `<div class="fr"><div class="lbl">${k}</div>
+      <div class="bar"><i style="left:0;width:${Math.min(100, v/tmax*100)}%;background:${c}"></i></div>
+      <div class="val">${fmt(v,1)} kWh</div></div>`).join('');
+
+  // Cost panel.
+  $('fcCost').textContent = rs(d.effective_cost_inr != null ? d.effective_cost_inr : d.total_cost_inr, 2);
+  $('fcBase').textContent = rs(d.baseline_cost_inr, 2);
+  $('fcSave').textContent = rs(d.saving_inr, 2);
+  $('fcThru').innerHTML = fmt(thru,2) + '<span class="u"> kWh</span>';
+  $('fcMs').innerHTML = fmt(d.solve_ms,1) + '<span class="u"> ms</span>';
+
+  const spec = (s.battery && s.battery.spec) || {};
+  $('fcWhy').textContent = thru < 0.05
+    ? `Plan leaves the battery alone. Cycling costs ₹${fmt(spec.degradation_inr_per_kwh,2)}/kWh in wear and the tariff spread is ₹${fmt((s.tariff&&s.tariff.spread&&s.tariff.spread.spread_inr_per_kwh),2)}/kWh — not enough to pay for it.`
+    : `Plan cycles ${fmt(thru,2)} kWh. Worth it because the spread beats the ₹${fmt(spec.degradation_inr_per_kwh,2)}/kWh wear cost.`;
+
+  $('fcSoc').textContent = `now ${fmt((s.battery&&s.battery.soc_pct),0)}%`;
+  $('fcPlanSub').textContent = a[0].reason;
+  $('fcSub').textContent =
+    `${fmt(loadKwh,1)} kWh demand · ${fmt(solarKwh,1)} kWh solar · ${fmt(gridKwh,1)} kWh from grid`;
+
+  // Model status.
+  const m = { load:{trained:(s.forecast||{}).trained, n:(s.forecast||{}).n_train},
+              solar:s.solar_model||{}, weather:s.weather||{} };
+  const row = (k,v)=>`<div class="reason"><span class="t">${k}</span><span>${v}</span></div>`;
+  $('fcModels').innerHTML =
+    row('Load', m.load.trained ? `trained on ${fmt(m.load.n)} blocks` : 'still collecting history') +
+    row('Solar', m.solar.trained ? `site correction fitted on ${fmt(m.solar.n_train)} daylight samples` : 'physics only — correction not fitted yet') +
+    row('Weather', `${m.weather.source||'—'}${m.weather.age_hours!=null?', '+fmt(m.weather.age_hours,1)+' h old':''}`) +
+    row('Array', `${fmt(m.solar.array_peak_w)} W at ${fmt(m.solar.tilt_deg,0)}° / ${fmt(m.solar.azimuth_deg,0)}°`);
+
+  // Per-horizon table.
+  const hz = horizons;
+  $('fcHzTag').textContent = hz.length ? `${hz.length} horizons` : 'direct multi-horizon';
+  $('fcHorizons').innerHTML = hz.length ? hz.map(h=>{
+    const mins2 = h.horizon_blocks * 15;
+    const label = mins2 < 60 ? `${mins2} min` : `${fmt(mins2/60,mins2%60?1:0)} h`;
+    return `<div class="reason"><span class="t">${label}</span>
+      <span><b>${fmt(h.predicted_w)} W</b> &nbsp;<span style="color:var(--faint)">±${fmt((h.upper_w-h.lower_w)/2)} W</span></span></div>`;
+  }).join('') : '<div class="empty">The forecaster needs about a day of history before it trains.</div>';
+
+  // Planned actions worth showing: the ones where something happens.
+  const acts = a.filter(x=>Math.abs(x.battery_w) > 20).slice(0, 30);
+  $('fcActions').innerHTML = acts.length ? acts.map(x=>
+    `<div class="reason"><span class="t">${clock(x.timestamp)}</span>
+      <span><b>${x.battery_w>0?'Discharge':'Charge'} ${fmt(Math.abs(x.battery_w))} W</b> — ${x.reason}</span></div>`
+  ).join('') : `<div class="empty">Nothing scheduled — the optimiser is holding the battery. That is a decision, not an absence of one.</div>`;
+
+  if ($('viewForecast').classList.contains('sel')){
+    drawForecast($('fcMain'), a, s.tariff);
+    drawSchedule($('fcPlan'), a);
+  }
+}
+
+/* Load vs solar, with grid draw dashed over it and peak-tariff bands behind. */
+function drawForecast(cv, acts, tariff){
+  const [x,w,h] = prep(cv);
+  const n = acts.length; if (!n) return;
+  const pad = 16, bw = w/n;
+  const maxV = Math.max(1, ...acts.map(a=>Math.max(a.expected_load_w, a.expected_solar_w, a.expected_grid_w)));
+  const py = v => h-pad - (Math.max(0,v)/maxV)*(h-pad*1.6);
+
+  // Tariff bands: darker ground where energy is dearer.
+  const rates = acts.map(a=>a.import_rate);
+  const rmin = Math.min(...rates), rmax = Math.max(...rates);
+  if (rmax > rmin){
+    for (let i=0;i<n;i++){
+      const f = (rates[i]-rmin)/(rmax-rmin);
+      if (f < 0.5) continue;
+      x.fillStyle = `rgba(9,9,11,${0.05 + 0.07*f})`;
+      x.fillRect(i*bw, 0, bw+.5, h-pad+4);
+    }
+  }
+  // Solar, filled.
+  x.beginPath(); x.moveTo(0, h-pad);
+  acts.forEach((a,i)=>x.lineTo(i*bw+bw/2, py(a.expected_solar_w)));
+  x.lineTo(w, h-pad); x.closePath();
+  x.fillStyle = 'rgba(139,139,147,.30)'; x.fill();
+  // Load, solid.
+  x.beginPath();
+  acts.forEach((a,i)=>{const px=i*bw+bw/2; i?x.lineTo(px,py(a.expected_load_w)):x.moveTo(px,py(a.expected_load_w));});
+  x.strokeStyle='#09090b'; x.lineWidth=2; x.lineJoin='round'; x.stroke();
+  // Grid after dispatch, dashed.
+  x.setLineDash([4,3]); x.beginPath();
+  acts.forEach((a,i)=>{const px=i*bw+bw/2; i?x.lineTo(px,py(a.expected_grid_w)):x.moveTo(px,py(a.expected_grid_w));});
+  x.strokeStyle='#52525b'; x.lineWidth=1.5; x.stroke(); x.setLineDash([]);
+  // Axis furniture.
+  x.strokeStyle='#d4d4d8'; x.lineWidth=1;
+  x.beginPath(); x.moveTo(0,h-pad); x.lineTo(w,h-pad); x.stroke();
+  x.fillStyle='#71717a'; x.font='10px system-ui';
+  x.fillText(fmt(maxV)+' W', 4, 11);
+  for (let i=0;i<n;i+=Math.ceil(n/6)){
+    x.fillText(clock(acts[i].timestamp), i*bw+2, h-4);
+  }
+}
+
+/* Charge/discharge bars with the SoC trajectory dashed over them. */
+function drawSchedule(cv, acts){
+  const [x,w,h] = prep(cv);
+  const n = acts.length; if (!n) return;
+  const bw = w/n, mid = h*0.55;
+  const peak = Math.max(1, ...acts.map(a=>Math.abs(a.battery_w)));
+  for (let i=0;i<n;i++){
+    const v = acts[i].battery_w, bh = Math.abs(v)/peak*(mid-16);
+    if (bh < .6) continue;
+    const bwid = Math.max(bw-.5,1);
+    if (v>0){ x.fillStyle='#09090b'; x.fillRect(i*bw, mid-bh, bwid, bh); }
+    else {
+      x.fillStyle='#e4e4e7'; x.fillRect(i*bw, mid, bwid, bh);
+      x.strokeStyle='#09090b'; x.lineWidth=1;
+      x.strokeRect(i*bw+.5, mid+.5, Math.max(bwid-1,.5), Math.max(bh-1,.5));
+    }
+  }
+  x.strokeStyle='#d4d4d8'; x.lineWidth=1;
+  x.beginPath(); x.moveTo(0,mid); x.lineTo(w,mid); x.stroke();
+  // SoC across the same axis, 0..1 mapped to the full height.
+  x.setLineDash([4,3]); x.beginPath();
+  acts.forEach((a,i)=>{const px=i*bw+bw/2, py=h-6-(a.soc_after*(h-16));
+    i?x.lineTo(px,py):x.moveTo(px,py);});
+  x.strokeStyle='#52525b'; x.lineWidth=1.5; x.stroke(); x.setLineDash([]);
+  x.fillStyle='#71717a'; x.font='10px system-ui';
+  x.fillText('discharge', 4, mid-5); x.fillText('charge', 4, mid+12);
+  x.fillText('SoC 100%', w-56, 10); x.fillText('0%', w-20, h-3);
+}
+
+/* ------------------------------------------------------------------ */
+/* Routing                                                              */
+/* ------------------------------------------------------------------ */
+function route(){
+  const want = location.hash === '#/forecast' ? 'Forecast' : 'Overview';
+  ['Overview','Forecast'].forEach(v=>{
+    $('view'+v).classList.toggle('sel', v===want);
+    $('nav'+v).classList.toggle('sel', v===want);
+  });
+  // Canvases have zero size while hidden, so anything drawn for a view that
+  // was not visible is lost. Redraw on arrival rather than on every tick.
+  if (lastSnap) render(lastSnap);
+}
+window.addEventListener('hashchange', route);
+
+/* ------------------------------------------------------------------ */
 let ws, retry = 0;
 function connect(){
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -475,14 +760,24 @@ function connect(){
   };
   ws.onerror = () => ws.close();
 }
+route();
 connect();
 
 // One immediate REST fetch so the page has content before the first push.
 fetch('/api/snapshot').then(r=>r.json()).then(render).catch(()=>{});
-window.addEventListener('resize', () => {
-  drawLine($('chart'), hist, '#09090b');
-  if (lastPlan && lastPlan.actions) drawPlan($('plan'), lastPlan.actions);
-});
+
+// Horizon predictions are not in the live snapshot - they cost a model call,
+// so they are fetched separately and refreshed on the dispatch cadence rather
+// than at 1 Hz.
+function pullForecast(){
+  fetch('/api/forecast').then(r=>r.json()).then(f=>{
+    horizons = f.horizons || [];
+    if (lastSnap) render(lastSnap);
+  }).catch(()=>{});
+}
+pullForecast();
+setInterval(pullForecast, 120000);
+window.addEventListener('resize', () => { if (lastSnap) render(lastSnap); });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/static/sw.js').catch(()=>{});
 </script>
 </body>

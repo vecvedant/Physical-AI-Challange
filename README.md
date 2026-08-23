@@ -108,6 +108,22 @@ tools/           hardware bring-up probe, dataset recorder, offline trainer
 docs/            architecture, wiring, BOM, register map, assumptions
 ```
 
+## The dashboard
+
+Two views, both served from the board and both usable on a phone:
+
+- **Overview** — live power and energy flows, discovered machines with health,
+  savings against the counterfactual, tariff position, and the decision log.
+- **Forecast** — the next 24 hours: predicted load against expected solar with
+  peak-tariff bands behind it, the battery schedule with its state-of-charge
+  trajectory, what the plan costs against doing nothing, per-horizon load
+  predictions with their empirical intervals, and the training state of every
+  model.
+
+The forecast view answers the question the overview cannot: not "what is
+happening" but "what is about to happen, and what does the node intend to do
+about it".
+
 ## Running it without hardware
 
 The whole system runs against a simulated plant, so you can develop, train and

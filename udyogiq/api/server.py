@@ -148,6 +148,55 @@ def build_app(node) -> Any:
                     "last_solved_t": node.mpc.last_solved_t},
         })
 
+    @app.get("/api/forecast")
+    def forecast(blocks: int = 96) -> JSONResponse:
+        """
+        The next 24 hours: what the plant will draw, what the roof will make,
+        what it will cost, and what the optimiser intends to do about it.
+
+        Assembled from the dispatch plan rather than by re-running the models.
+        The plan already carries the load and solar profile it was solved
+        against, block by block, so serving those is both cheaper and *more
+        honest* than recomputing: the page then shows the forecast the schedule
+        was actually built on, not a fresher one that would silently disagree
+        with the decisions displayed beside it.
+
+        Anchor horizons come straight from the forecaster and carry empirical
+        prediction intervals; the dense per-block profile is interpolated
+        between them, which is stated here so the page can draw the two
+        differently.
+        """
+        blocks = max(1, min(blocks, 192))
+        plan = node.mpc.plan
+
+        horizons = []
+        if node.load_forecaster.trained:
+            import numpy as _np
+            ts, pw = node.historian.training_series(days=14)
+            if len(ts) > max(200, 0):
+                for p in node.load_forecaster.predict(_np.asarray(ts), _np.asarray(pw)):
+                    horizons.append(p.to_dict())
+
+        return JSONResponse({
+            "generated_t": time.time(),
+            "block_minutes": node.mpc.optimiser.block_minutes,
+            "plan": plan.to_dict(limit=blocks) if plan else None,
+            "horizons": horizons,
+            "models": {
+                "load": {
+                    "trained": node.load_forecaster.trained,
+                    "n_train_blocks": node.load_forecaster.n_train,
+                    "trained_at": node.load_forecaster.trained_at,
+                    "horizons": list(node.load_forecaster.horizons),
+                },
+                "solar": node.solar_forecaster.status(),
+                "weather": node.weather.status(),
+            },
+            "battery": node.battery.status(),
+            "tariff": node.tariff.describe(),
+            "demand": node.demand.status(),
+        })
+
     @app.get("/api/savings")
     def savings() -> JSONResponse:
         return JSONResponse({
