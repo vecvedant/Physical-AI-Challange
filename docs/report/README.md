@@ -15,6 +15,12 @@ npm install docx
 node tools/build_report.js docs/report/Udyog_IQ_Project_Report.docx
 ```
 
+## No signature field
+
+The template's declaration asks for a date and nothing else, so that is all the
+report carries. An invented signature line would be a field you have to explain
+rather than one the organisers asked for.
+
 ## No unmeasured figures
 
 The report quotes no performance number that has not been measured on hardware.
@@ -41,7 +47,7 @@ The document marks these in red italics:
 - Team name, registration / team ID, institution and city
 - Additional team members
 - Demo video link (public YouTube or Drive)
-- Date and signature
+- Date
 - Three project photographs, in the dashed placeholder boxes
 
 Every quantitative result in the report was produced against the simulator with

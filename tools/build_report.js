@@ -646,9 +646,11 @@ const doc = new Document({
         "through the whole system specifically to keep that distinction enforceable in software rather than by " +
         "memory."),
       SPACER(260),
+      // The template asks for a date and nothing else here. An invented
+      // signature row would be a field the entrant has to explain rather than
+      // one the organisers requested.
       FIELDS([
         FIELD("Date", null, "date of submission"),
-        FIELD("Team Leader signature", null, "sign here"),
       ]),
       SPACER(360),
       new Paragraph({
