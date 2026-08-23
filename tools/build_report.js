@@ -402,8 +402,8 @@ const doc = new Document({
       FIELDS([
         FIELD("Model Used", "Five models. Online leader clustering for machine discovery; linear autoencoder (PCA reconstruction) with Isolation Forest for health; HistGradientBoostingRegressor for load and solar forecasting; dynamic programming with receding horizon control for dispatch."),
         FIELD("Training Platform", "scikit-learn, trained and retrained on the UNO Q itself from the on board SQLite historian. Nothing is trained in a cloud notebook and shipped down."),
-        FIELD("Accuracy", "Machine discovery: 5 of 7 recovered, step size within 3.5%. Health: alerts at 15% degradation, healthy machines 77 to 82 out of 100. Load forecast: 12.0% normalised MAE at 15 minutes against 28.5% for persistence."),
-        FIELD("Dataset", "No external dataset. Every model manufactures its own supervision from the site's own unlabelled stream, roughly 600,000 samples per week of operation. Evaluated against a physically grounded workshop simulator with known ground truth."),
+        FIELD("Accuracy", "Not yet measured on hardware. The proof of concept bench described in section 6 is the first opportunity to quote a figure, and none is claimed until it has been taken."),
+        FIELD("Dataset", "No external dataset and no pre trained weights. Every model builds its own supervision from the site's own unlabelled stream, one sample per second from the meter. Nothing is downloaded."),
       ]),
 
       SPACER(200),
@@ -431,31 +431,32 @@ const doc = new Document({
         "seconds, which is what makes on device learning practical rather than aspirational."),
 
       H2("Brief Description and Limitations"),
-      P("Disaggregation must come before diagnosis. This was not obvious and it cost a rewrite. The first health " +
-        "model scored the plant's aggregate feature windows and appeared to work, until it was measured on held " +
-        "out data, where it scored healthy operation at 0.767 mean anomaly against 0.498 for genuinely degraded " +
-        "operation. Inverted. An aggregate window changes far more when a different mix of machines happens to " +
-        "be running than when one machine degrades, so the model had learned the shift roster, and a quiet " +
-        "afternoon looked more alarming than a failing compressor. Health is now scored per machine on events " +
-        "that disaggregation has already attributed, each of which belongs to exactly one machine."),
+      P("Disaggregation must come before diagnosis. This was not obvious and it cost a rewrite. An early health " +
+        "model scored the plant's aggregate feature windows and appeared to work, until it was checked against " +
+        "data it had not seen, where it ranked ordinary healthy operation as more anomalous than genuinely " +
+        "degraded operation. The ranking was inverted. An aggregate window changes far more when a different " +
+        "mix of machines happens to be running than it does when one machine degrades, so the model had learned " +
+        "the shift roster rather than the machines, and a quiet afternoon looked more alarming than a failing " +
+        "compressor. Health is now scored per machine, on events that disaggregation has already attributed, " +
+        "each of which belongs to exactly one machine."),
       SPACER(80),
       CALLOUT("Where this degrades or fails, stated plainly", [
         "This is not motor current signature analysis. That technique resolves sidebands around the supply " +
         "frequency to identify broken rotor bars and bearing defects, and it needs current sampled in the " +
-        "kilohertz. At 1 Hz those sidebands do not exist in our data at any resolution. What is claimed here is " +
-        "trend and anomaly detection on aggregate electrical parameters: real, useful, and a different technique.",
-        "Disaggregation cannot see a small load hiding under a large running one. The detection threshold scales " +
-        "with local noise, so while a 2 kW motor runs, a 340 W fan switching sits below the floor. In testing the " +
-        "fan and the lighting circuit were never recovered for exactly this reason. This is a structural property " +
-        "of single point disaggregation, not a tuning failure.",
-        "Machines that switch rarely take proportionally longer to discover. Across random seeds, four simulated " +
-        "days recovered four of five target machines and five days recovered all of them. A machine used twice a " +
-        "day takes correspondingly longer, and that is the honest cost of having no labels.",
+        "kilohertz. At one sample per second those sidebands do not exist in our data at any resolution. What " +
+        "is claimed here is trend and anomaly detection on aggregate electrical parameters: a real technique, " +
+        "and a different one.",
+        "Disaggregation cannot see a small load hiding under a large running one. The detection threshold " +
+        "scales with local noise, so while a large motor runs, a small fan switching sits below the floor. " +
+        "This is a structural property of measuring at a single point, not a tuning failure.",
+        "Machines that switch rarely take proportionally longer to discover, because a machine only becomes " +
+        "knowable once it has switched often enough to form a cluster. That is the honest cost of having no " +
+        "labels.",
         "Two machines that always switch together will be reported as one, and simultaneous switching produces " +
         "composite clusters. The dashboard shows these as unnamed candidates for the operator to confirm or " +
         "ignore, rather than asserting that they are machines.",
-        "Battery dispatch is advisory unless the inverter accepts external commands. Where it does not, the node " +
-        "still reports the saving it would have captured, and still performs load side actuation.",
+        "Battery dispatch is advisory unless the inverter accepts external commands. Where it does not, the " +
+        "node still reports the saving it would have captured, and still performs load side actuation.",
       ]),
 
       new Paragraph({ children: [new PageBreak()] }),
@@ -508,90 +509,77 @@ const doc = new Document({
 
       /* ---------------- 6. Testing ---------------- */
       H1("6. Testing & Results"),
-      P("Testing was done against a simulator with known ground truth, because it is the only way to ask whether " +
-        "the system found the right machines rather than merely plausible ones. Every figure below comes from " +
-        "that simulator and is labelled as such. Meter frames carry a provenance field end to end so that " +
-        "simulated data can never be presented as measured."),
 
-      SPACER(100),
-      H2("Machine discovery: 5 of 7 machines, zero labels"),
-      TBL(["Machine (ground truth)", "Discovered", "Error"], [
-        ["Air compressor, 1500 W and 1047 VAr", "1511 W and 1054 VAr", "0.7% high"],
-        ["Coolant pump, 1350 W and 1227 VAr", "1361 W and 1236 VAr", "0.8% high"],
-        ["Lathe, 2200 W and 1305 VAr", "2268 W and 1347 VAr", "3.1% high"],
-        ["Bench grinder, 750 W and 405 VAr", "760 W and 411 VAr", "1.3% high"],
-        ["Office load, 180 W and 71 VAr", "174 W and 84 VAr", "3.3% low"],
-        ["Exhaust fan, 340 W", "not recovered", "below threshold"],
-        ["Shop lighting, 420 W", "not recovered", "below threshold"],
-      ], [3800, 3060, 2500]),
-      SPACER(100),
-      P("The two misses are structural rather than a tuning failure. Both switch at shift boundaries, when the " +
-        "large motors have already raised the adaptive detection threshold above their step size. The " +
-        "unexplained residual is reported on the dashboard rather than hidden, because a disaggregation system " +
-        "that quietly under reports is worse than one that admits what it missed.", { color: MUTED }),
+      H2("What has been tested so far"),
+      P("Testing to date is of the software, end to end, and of the bench build. " +
+        "The pipeline was exercised continuously from acquisition through " +
+        "disaggregation, health scoring, forecasting and dispatch to the " +
+        "dashboard, with the policy engine in advisory mode so that every " +
+        "decision was logged and none was executed."),
+      P("A regression suite of 27 tests covers the parts that broke during " +
+        "development: register decoding and the physical sanity check that " +
+        "rejects a swapped word order, buffer ordering, event detection against " +
+        "load ripple, expiry of stale machine state, the battery charge floor, " +
+        "the dispatch plan never scoring worse than doing nothing, demand " +
+        "averaged over the billing window rather than instantaneously, advisory " +
+        "mode never actuating, critical loads never shed, and the interlock " +
+        "refusing a switch that comes too soon. Each test corresponds to a fault " +
+        "that was found by measurement rather than by reading the code."),
 
-      SPACER(160),
-      H2("Predictive maintenance: detected at 15% wear, with no fault data"),
-      TBL(["Condition", "Compressor health", "Alert", "Other machines"], [
-        ["Healthy, baseline period", "81 out of 100", "no", "76 to 80"],
-        ["Healthy, held out", "82 out of 100", "no", "76 to 80"],
-        ["15% degradation", "0 out of 100", "ALERT", "76 to 80"],
-        ["30% degradation", "0 out of 100", "ALERT", "76 to 80"],
-        ["45% degradation", "0 out of 100", "ALERT", "76 to 80"],
-      ], [2900, 2400, 1560, 2500]),
-      SPACER(100),
-      P("The alarm is specific rather than a general drift. Every other machine stayed in its healthy band " +
-        "throughout. Operator facing output is a sentence, not a score: “power factor falling 0.0061 per day, " +
-        "check for a degrading motor or a failing capacitor” is actionable in a way that “anomaly score 0.42” " +
-        "is not.", { color: MUTED }),
+      SPACER(120),
+      CALLOUT("No performance figures are quoted in this report", [
+        "Accuracy, savings and detection rates all describe how the system " +
+        "behaves against real machines on a real supply, and that measurement " +
+        "has not been taken yet. Numbers produced during development came from a " +
+        "simulator written to exercise the code, and a simulator can only " +
+        "confirm that the software does what it was told to do. Quoting them " +
+        "here would describe the simulator, not the plant.",
+        "The table below is left blank deliberately. It is filled in from the " +
+        "bench described next, and not before.",
+      ]),
 
       SPACER(160),
-      H2("Forecasting: walk forward on 30% held out history"),
-      TBL(["Horizon", "Model MAE", "Persistence baseline", "Percent of mean load"], [
-        ["15 minutes", "213 W", "506 W", "12.0%"],
-        ["1 hour", "226 W", "615 W", "12.7%"],
-        ["24 hours", "277 W", "307 W", "15.6%"],
-      ], [2400, 2320, 2320, 2320]),
-      SPACER(100),
-      P("The 24 hour margin is thin because same time yesterday is genuinely strong for a scheduled workshop. " +
-        "The model earns its place on the short horizons that drive charge decisions, and by handling weekends.",
-        { color: MUTED }),
+      H2("Proof of concept bench"),
+      P("The bench is the meter wired to a single phase supply feeding a motor " +
+        "load, with the isolated converter and the contactor as drawn in figure " +
+        "2. The procedure is ordered so that each step removes a class of failure " +
+        "before the next step can be confused by it."),
+      ...[
+        "Verify the meter answers on RS485 and that the register map is correct. The probe tool sweeps baud rates and addresses, decides word order from physics that must hold on any single phase supply, and prints readings to check against the meter's own display. A wrong register offset does not raise an error, it returns a plausible wrong number, so this step is not optional.",
+        "Record a baseline with the motor switching normally, and confirm that the node discovers it as a machine and that its step size matches what the meter reports.",
+        "Let the health model observe enough starts to leave its learning state, then change the machine's condition, for example by loading it more heavily or restricting its airflow, and record whether and when the health score responds.",
+        "Compare the forecast against what the plant actually drew over the following period.",
+        "Exercise the contactor through the interlock: confirm minimum dwell is enforced, confirm the switching rate cap holds, and confirm the contactor returns to closed when the Linux side is stopped.",
+      ].map((t) => new Paragraph({
+        numbering: { reference: "steps", level: 0 },
+        spacing: { after: 90, line: 264 },
+        children: [new TextRun({ text: t, size: 20, font: "Calibri" })],
+      })),
 
       SPACER(160),
-      H2("Dispatch economics, and the most interesting result in the project"),
-      TBL(["Scenario", "Saving", "Battery throughput"], [
-        ["Surplus solar, standard battery", "Rs 0.00, declines to cycle", "0.00 kWh"],
-        ["Weekday load, standard battery", "Rs 0.00, declines to cycle", "0.00 kWh"],
-        ["Surplus solar, cheaper battery", "Rs 10.56", "5.66 kWh"],
-        ["Demand spike against a 3 kVA limit", "Rs 7,087.57, or 98% of the bill", "5.06 kWh"],
-      ], [3800, 3060, 2500]),
-      SPACER(100),
-      P("At realistic Indian lithium iron phosphate economics, roughly Rs 15,000 per kWh installed over 4,000 " +
-        "cycles, a kilowatt hour of battery throughput costs Rs 5.56 in consumed cycle life. Arbitrage therefore " +
-        "only pays if the tariff spread beats Rs 6.44 per kWh, and on the default schedule the spread is " +
-        "Rs 3.20. The optimiser correctly declines to cycle, and says so on the dashboard."),
-      P("Almost all of the money is in demand charge shaving instead. A device that can tell an owner which of " +
-        "those two applies to them is worth considerably more than one that assumes the answer, and an " +
-        "optimiser that leaves the battery alone is very easy to mistake for one that is broken."),
-
-      SPACER(160),
-      H2("System performance"),
-      TBL(["Measure", "Result"], [
-        ["Dispatch solve time, 96 blocks by 41 states by 21 actions", "4.6 to 7.1 ms"],
-        ["Acquisition reliability over a continuous run", "100%, zero errors"],
-        ["Warm start replay of 7 days of plant history", "65 s for 604,800 samples"],
-        ["Storage after rollup", "14,400 raw samples become 240 minute aggregates"],
-        ["Dashboard update rate over WebSocket", "1 Hz, verified live on a mobile viewport"],
-        ["Regression tests", "27 passed"],
-      ], [5600, 3760]),
+      H2("Results"),
+      P("To be completed from the bench above. Record what was measured, not what " +
+        "was expected.", { color: MUTED, italics: true }),
+      SPACER(60),
+      TBL(["Measurement", "Method", "Result"], [
+        ["Meter register map verified against the display", "tools/probe_meter.py", ""],
+        ["Machine discovered from the aggregate signal", "run the motor, watch the dashboard", ""],
+        ["Step size reported against meter reading", "compare with the meter display", ""],
+        ["Time taken for the machine to be confirmed", "from first start to confirmation", ""],
+        ["Health score response to a changed condition", "load or restrict the machine", ""],
+        ["Forecast error over the following period", "compare against measured demand", ""],
+        ["Contactor interlock enforced", "attempt a switch inside the dwell time", ""],
+        ["Contactor restored when the host is stopped", "stop the application, observe", ""],
+        ["Acquisition reliability over a continuous run", "successful reads divided by attempts", ""],
+      ], [3500, 3200, 2660]),
 
       SPACER(200),
       H2("Project Images"),
       PLACEHOLDER("[ Photo 1: the assembled node. UNO Q, Selec meter, isolated RS485 converter, contactor ]", 1700),
       SPACER(100),
-      PLACEHOLDER("[ Photo 2: the dashboard in use, showing discovered machines and live power ]", 1700),
+      PLACEHOLDER("[ Photo 2: the dashboard in use, showing the discovered machine and live power ]", 1700),
       SPACER(100),
-      PLACEHOLDER("[ Photo 3: the bench setup with the test load running ]", 1700),
+      PLACEHOLDER("[ Photo 3: the bench with the motor load running ]", 1700),
 
       new Paragraph({ children: [new PageBreak()] }),
 
@@ -600,65 +588,50 @@ const doc = new Document({
 
       H2("Challenges Faced"),
       BULLET_R([["A fixed detection threshold cannot work. ", { bold: true }],
-        ["The first change point detector produced 479 edges against 71 real switching events, because a 2.2 kW " +
-         "lathe with 6% ripple swings by 130 W while doing nothing unusual. No single threshold catches a 340 W " +
-         "fan at two in the morning without drowning during the day. The threshold is now the larger of an " +
-         "absolute floor and a multiple of the locally measured noise, and the noise estimate updates only on " +
-         "movement below threshold, so a real step cannot teach the detector to ignore steps of its own size."]]),
+        ["The first change point detector fired constantly, because a large machine under load ripples by more " +
+         "than a small machine draws in total. No single threshold catches a small fan switching at night " +
+         "without drowning during the day. The threshold is now the larger of an absolute floor and a multiple " +
+         "of the locally measured noise, and the noise estimate updates only on movement below threshold, so a " +
+         "real step cannot teach the detector to ignore steps of its own size."]]),
       BULLET_R([["The obvious health model was inverted. ", { bold: true }],
-        ["Scoring aggregate windows gave 0.767 mean anomaly on held out healthy data against 0.498 on degraded " +
-         "data. It had learned the shift roster. This forced the architecture: disaggregate first, then diagnose " +
-         "per machine."]]),
+        ["Scoring the plant's aggregate windows ranked healthy operation as more anomalous than degraded " +
+         "operation on data the model had not seen. It had learned the shift roster rather than the machines. " +
+         "This forced the architecture: disaggregate first, then diagnose per machine."]]),
       BULLET_R([["Degradation broke machine identity. ", { bold: true }],
         ["As a motor wears it draws more power at worse power factor, drifts outside its own cluster tolerance, " +
-         "and is filed as a brand new appliance, taking its health history with it. The symptom was the " +
-         "compressor's event count frozen at 515 while replacement clusters appeared. Cluster centroids now " +
+         "and is filed as a brand new appliance, taking its health history with it. The symptom was a machine " +
+         "whose event count stopped rising while replacement clusters appeared beside it. Cluster centroids now " +
          "track slow drift while the health baseline stays frozen."]]),
       BULLET_R([["Solar contaminates disaggregation at the grid tie. ", { bold: true }],
-        ["With the meter measuring import, a cloud crossing looks exactly like a machine switching. Over a week " +
-         "this produced six clusters spanning 1243 W to 1828 W where only two machines existed. Generation is " +
-         "now added back to recover the load side signal before detection."]]),
+        ["With the meter measuring import, a cloud crossing looks exactly like a machine switching, and a " +
+         "machine starting while irradiance falls registers a step of the wrong size. Generation is now added " +
+         "back to recover the load side signal before detection."]]),
       BULLET_R([["Calibrating a health score took three attempts. ", { bold: true }],
-        ["Thresholds taken from the training data are optimistic and left healthy machines reading 57 out of 100 " +
-         "permanently. A 99th percentile of a 20 point calibration slice is simply its maximum, so one unusual " +
-         "start flattened everything to 43 out of 100. The scale is now a robust median plus deviation estimate " +
-         "on held out data."]]),
+        ["Thresholds taken from the training data are optimistic, and left healthy machines reading as " +
+         "permanently unwell. Taking a high percentile from a small calibration slice is barely different from " +
+         "taking its maximum, so a single unusual start flattened every score afterwards. The scale is now a " +
+         "robust median and deviation estimate on data the model has not seen."]]),
       BULLET_R([["A silent WebSocket rejection. ", { bold: true }],
-        ["The dashboard ran on its single startup fetch and never updated. FastAPI resolves parameter types at " +
-         "runtime, the module used deferred annotations, and the framework imports were function local, so the " +
+        ["The dashboard ran on its single startup fetch and never updated. The web framework resolves parameter " +
+         "types at runtime, the module used deferred annotations, and its imports were function local, so the " +
          "socket parameter was treated as a missing query field. Found by watching the browser console, not by " +
          "reading the code."]]),
 
       H2("What You Learned"),
       P("The recurring lesson is that a model can look correct and be inverted, and that only measurement " +
-        "against ground truth tells the difference. Every significant fix in this project came from a number " +
-        "that disagreed with expectation: 479 edges, a 0.767 anomaly score on healthy data, an event counter " +
-        "that stopped moving, a residual of negative 3781 W. None of them raised an error. All of them would " +
-        "have shipped."),
+        "against something you already know the answer to will tell you the difference. Every significant fix " +
+        "in this project came from a number that disagreed with expectation rather than from an error message. " +
+        "None of those faults raised an exception. All of them would have shipped."),
       P("The second lesson is that constraints are where the design comes from. Having one meter forced " +
         "disaggregation, which turned out to be the interesting part. Having no labels forced everything to be " +
-        "self supervised, which is what makes it deployable in a workshop nobody will ever instrument. Having to " +
-        "install on aarch64 ruled out XGBoost and PyTorch, which is why the models are small enough to retrain " +
-        "on the board. Having a battery with a finite cycle life is what makes doing nothing a valid and " +
-        "frequently correct answer."),
-
-      H2("Future Improvements"),
-      BULLET_R([["Multi drop the inverter. ", { bold: true }],
-        ["The RS485 bus takes 32 devices. Putting a hybrid inverter on it at a second slave address turns solar " +
-         "and battery state from estimated into measured, with no new wiring, and directly improves both " +
-         "disaggregation and dispatch."]]),
-      BULLET_R([["A high rate current channel. ", { bold: true }],
-        ["A split core transformer on the STM32 ADC sampled in the kilohertz would give the microcontroller " +
-         "genuine spectral work to do and turn trend detection into fault identification, naming a bearing " +
-         "defect rather than reporting that something has changed."]]),
-      BULLET_R([["Operator confirmation of discovered machines. ", { bold: true }],
-        ["The node can tell that a 1.5 kW motor with a threefold inrush exists. Only the person who works there " +
-         "knows it is the compressor. Renaming already works, and a guided first run flow that walks an operator " +
-         "through switching each machine once would collapse the discovery period from days to minutes."]]),
-      BULLET_R([["Three phase support. ", { bold: true }],
-        ["The meter and the model are single phase today, which fits MSME machine shops. Three balanced channels " +
-         "of the same pipeline extends it to larger plants, and phase imbalance becomes an additional and quite " +
-         "sensitive health signal."]]),
+        "self supervised, which is what makes it deployable in a workshop nobody will ever instrument. Having " +
+        "to install on the board's processor ruled out the heavier libraries, which is why the models are small " +
+        "enough to retrain on the board itself. Having a battery with a finite cycle life is what makes doing " +
+        "nothing a valid and frequently correct answer."),
+      P("The third is about honesty in reporting. A simulator was written to exercise the pipeline, and it was " +
+        "genuinely useful for finding faults. It cannot tell you how the system performs on a real supply, and " +
+        "this report quotes no figure from it, because a number with the wrong provenance is worse than no " +
+        "number at all."),
 
       new Paragraph({ children: [new PageBreak()] }),
 
@@ -667,10 +640,11 @@ const doc = new Document({
       P("We confirm that this is our original, unpublished work. The Arduino UNO Q is the primary board in this " +
         "project. All team members have reviewed and agree to this report."),
       SPACER(100),
-      P("We further confirm that every quantitative result in this report was produced against a simulated plant " +
-        "with known ground truth, is labelled as such, and has not been presented as a measurement taken on " +
-        "physical hardware. Meter frames carry a provenance field end to end specifically to prevent that " +
-        "confusion."),
+      P("We further confirm that this report quotes no performance figure that has not been measured. Results " +
+        "from the proof of concept bench are recorded in section 6 as they are taken, and nothing produced by " +
+        "the development simulator is presented as a measurement. Meter readings carry a provenance field " +
+        "through the whole system specifically to keep that distinction enforceable in software rather than by " +
+        "memory."),
       SPACER(260),
       FIELDS([
         FIELD("Date", null, "date of submission"),

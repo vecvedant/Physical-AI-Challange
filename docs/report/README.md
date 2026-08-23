@@ -15,6 +15,17 @@ npm install docx
 node tools/build_report.js docs/report/Udyog_IQ_Project_Report.docx
 ```
 
+## No unmeasured figures
+
+The report quotes no performance number that has not been measured on hardware.
+Accuracy, savings and detection rates were removed, because the only numbers
+available for them came from the development simulator, and a simulator can
+confirm that the software does what it was told to do but says nothing about how
+the system performs on a real supply.
+
+Section 6 carries a blank results table instead. Fill it in from the proof of
+concept bench, and record what was measured rather than what was expected.
+
 ## House style
 
 The prose contains no dash characters at all. The only dashes anywhere in the
