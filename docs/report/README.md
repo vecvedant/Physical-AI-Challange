@@ -15,6 +15,14 @@ npm install docx
 node tools/build_report.js docs/report/Udyog_IQ_Project_Report.docx
 ```
 
+## House style
+
+The prose contains no dash characters at all. The only dashes anywhere in the
+document sit inside literal identifiers, where removing one would make the name
+wrong: the meter part number, the two processor core names, the weather service,
+the Python package, and the repository URL. Thirteen in total, all verified by
+the audit built into the build. If you edit the text, keep to that rule.
+
 ## Still to fill in before submitting
 
 The document marks these in red italics:
