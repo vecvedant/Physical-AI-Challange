@@ -350,7 +350,7 @@ const doc = new Document({
         "Diagnose. Each machine's start events are scored against a density model of its own learned normal, and drift in power factor, draw and inrush is tracked separately.",
         "Forecast. Plant load comes from the site's own history. Solar comes from an Open-Meteo feed through a clear sky physics model with a learned site correction.",
         "Decide. Dynamic programming over discretised battery state of charge, recomputed every 15 minutes in a receding horizon control loop.",
-        "Act. Idle cutoff and demand shedding through the hardware interlock, in advisory mode until an operator deliberately enables actuation.",
+        "Act. Idle cutoff and demand shedding through the hardware interlock, in advisory mode until an operator deliberately enables actuation. In manual control every automatic policy suspends and the operator works the contactor by hand, still through the same interlock.",
         "Account. A shadow ledger runs the same day with no battery movement and no idle cutoff, so the reported saving is a measured difference rather than a claim.",
       ].map((t) => new Paragraph({
         numbering: { reference: "steps", level: 0 },
@@ -388,6 +388,36 @@ const doc = new Document({
         "sketch, and the meter transport is a configuration key with three backends: mastered by the MCU, " +
         "mastered by Linux over a USB to RS485 adapter, or simulated. Whichever way the bring up lands, it is a " +
         "one line change rather than a rewrite.",
+      ]),
+      SPACER(160),
+      H2("Control authority"),
+      P("This distinction matters more than any other in the project, so it is " +
+        "stated here rather than left to a limitations list. Optimising " +
+        "something you cannot actuate is not optimisation, it is a report."),
+      SPACER(60),
+      TBL(["What", "Actuated?", "How"], [
+        ["Loads", "Yes",
+         "A contactor in series with the machine supply, behind an interlock enforced on the microcontroller."],
+        ["Sources: grid against solar and battery", "Only where the inverter accepts external commands",
+         "Modbus to the inverter, on the same RS485 pair as the meter."],
+      ], [2600, 2400, 4360]),
+      SPACER(140),
+      CALLOUT("The node does not switch between grid and solar, deliberately", [
+        "Source transfer is the inverter's job, and nearly every hybrid inverter " +
+        "already does it internally. Building an improvised changeover into a " +
+        "project like this would also be unsafe: connecting inverter output to a " +
+        "grid line that somebody believes is dead is the hazard that anti " +
+        "islanding protection exists to prevent, and a proper transfer switch is " +
+        "mechanically interlocked so both sources can never meet.",
+        "So the division is that the inverter moves power between sources and the " +
+        "node moves loads. Where the inverter exposes Modbus the node also " +
+        "commands its charge and discharge and the dispatch plan is enforced. " +
+        "Where it does not, the plan is reported and labelled as advice, and the " +
+        "node goes on deciding what runs and when, which it can always do.",
+        "This is not a climbdown. Across every scenario examined during " +
+        "development, almost all of the available saving sat in demand charge " +
+        "shaving, which is a load side action, and almost none in battery " +
+        "arbitrage, which the wear cost usually makes uneconomic in any case.",
       ]),
       SPACER(140),
       ...FIGURE("wiring_diagram.png", 2207 / 964,
@@ -455,8 +485,11 @@ const doc = new Document({
         "Two machines that always switch together will be reported as one, and simultaneous switching produces " +
         "composite clusters. The dashboard shows these as unnamed candidates for the operator to confirm or " +
         "ignore, rather than asserting that they are machines.",
-        "Battery dispatch is advisory unless the inverter accepts external commands. Where it does not, the " +
-        "node still reports the saving it would have captured, and still performs load side actuation.",
+        "Battery dispatch is advisory unless the inverter accepts external commands. Where it does not, the node " +
+        "still reports the saving it would have captured, and still performs load side actuation. The dashboard " +
+        "states which of the two applies rather than offering a control that quietly does nothing.",
+        "The node does not switch the plant between grid and solar. That transfer belongs to the inverter, for " +
+        "safety reasons as much as practical ones, and is discussed in section 3.",
       ]),
 
       new Paragraph({ children: [new PageBreak()] }),
@@ -478,7 +511,7 @@ const doc = new Document({
         ["udyogiq/store/", "SQLite historian with batched writes, one minute rollup and retention."],
         ["udyogiq/api/", "FastAPI and WebSocket server."],
         ["udyogiq/runtime.py", "Orchestrator. One acquisition thread, everything else on a cooperative timer."],
-        ["web/", "Dashboard with two views, Overview and Forecast, served from the board."],
+        ["web/", "Dashboard with three views served from the board. Overview for live state, Forecast for the day ahead, and Control for the automatic and manual switch."],
         ["sim/", "Synthetic workshop with solar, battery and injectable faults."],
         ["tools/probe_meter.py", "Hardware bring up. Verifies the register map against a real meter."],
         ["tests/", "27 regression tests, each corresponding to a fault found by measurement."],
@@ -498,6 +531,8 @@ const doc = new Document({
         [" finds machines running at standby draw and cuts them, subject to the interlock."]]),
       BULLET_R([["UdyogIQ.warmup()", { font: "Consolas", bold: true }],
         [" replays simulated history at processor speed so the node starts already knowing a plant."]]),
+      BULLET_R([["PolicyEngine.set_mode()", { font: "Consolas", bold: true }],
+        [" hands control to the operator or takes it back. Switching to manual suspends every automatic policy and deliberately does not move the contactor."]]),
 
       SPACER(200),
       FIELDS([
@@ -550,6 +585,7 @@ const doc = new Document({
         "Let the health model observe enough starts to leave its learning state, then change the machine's condition, for example by loading it more heavily or restricting its airflow, and record whether and when the health score responds.",
         "Compare the forecast against what the plant actually drew over the following period.",
         "Exercise the contactor through the interlock: confirm minimum dwell is enforced, confirm the switching rate cap holds, and confirm the contactor returns to closed when the Linux side is stopped.",
+        "Check the control modes: confirm that switching to manual suspends the automatic policies without moving the contactor, that a manual switch is refused while in automatic, and that a manual request is still subject to the interlock.",
       ].map((t) => new Paragraph({
         numbering: { reference: "steps", level: 0 },
         spacing: { after: 90, line: 264 },
@@ -570,6 +606,7 @@ const doc = new Document({
         ["Forecast error over the following period", "compare against measured demand", ""],
         ["Contactor interlock enforced", "attempt a switch inside the dwell time", ""],
         ["Contactor restored when the host is stopped", "stop the application, observe", ""],
+        ["Manual control suspends the automatic policies", "switch to manual, watch the log", ""],
         ["Acquisition reliability over a continuous run", "successful reads divided by attempts", ""],
       ], [3500, 3200, 2660]),
 
