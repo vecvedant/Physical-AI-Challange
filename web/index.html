@@ -86,6 +86,40 @@ nav a.sel{color:var(--text);background:var(--panel-2);border-color:var(--line)}
 .view{display:none}
 .view.sel{display:contents}
 
+/* Control view. The mode switch is the most consequential control on the whole
+   dashboard, so it is large, unambiguous, and states which half is live. */
+.seg{display:flex;gap:0;border:2px solid var(--text);border-radius:10px;overflow:hidden;margin-top:2px}
+.seg button{flex:1;padding:14px 10px;font:inherit;font-weight:700;font-size:15px;
+  background:#fff;color:var(--text);border:0;cursor:pointer;letter-spacing:.3px}
+.seg button+button{border-left:2px solid var(--text)}
+.seg button.on{background:var(--text);color:#fff}
+.seg button:disabled{cursor:default;opacity:.5}
+
+.opt{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+.opt button{flex:1;min-width:96px;padding:11px 8px;font:inherit;font-size:13px;font-weight:600;
+  background:#fff;color:var(--text);border:1px solid var(--line);border-radius:9px;cursor:pointer}
+.opt button.on{background:var(--text);color:#fff;border-color:var(--text)}
+.opt button:disabled{opacity:.45;cursor:not-allowed}
+
+.bigbtn{width:100%;padding:15px;font:inherit;font-size:15px;font-weight:700;
+  border-radius:10px;border:2px solid var(--text);background:#fff;color:var(--text);
+  cursor:pointer;margin-top:8px}
+.bigbtn.danger{background:var(--text);color:#fff}
+.bigbtn:disabled{opacity:.4;cursor:not-allowed}
+
+.note{font-size:12.5px;color:var(--dim);margin-top:10px;padding:10px 12px;
+  background:var(--panel-2);border-radius:9px;line-height:1.5}
+.note b{color:var(--text)}
+.kv{display:flex;justify-content:space-between;gap:12px;padding:8px 0;
+  border-bottom:1px solid var(--line);font-size:13px}
+.kv:last-child{border-bottom:0}
+.kv span:first-child{color:var(--dim)}
+.kv span:last-child{font-weight:600;font-variant-numeric:tabular-nums}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:60;
+  background:var(--text);color:#fff;padding:11px 18px;border-radius:999px;font-size:13px;
+  max-width:88vw;opacity:0;transition:opacity .25s;pointer-events:none}
+.toast.show{opacity:1}
+
 /* Legend for the forecast charts, since monochrome needs naming. */
 .leg{display:flex;flex-wrap:wrap;gap:12px;margin-top:9px;font-size:11.5px;color:var(--dim)}
 .leg i{display:inline-block;width:16px;height:3px;border-radius:2px;margin-right:5px;
@@ -225,6 +259,7 @@ footer{grid-column:span 12;text-align:center;color:var(--faint);font-size:11.5px
   <nav>
     <a href="#/overview" id="navOverview">Overview</a>
     <a href="#/forecast" id="navForecast">Forecast</a>
+    <a href="#/control" id="navControl">Control</a>
   </nav>
 </div></header>
 
@@ -349,6 +384,57 @@ footer{grid-column:span 12;text-align:center;color:var(--faint);font-size:11.5px
     </div>
 
   </div><!-- /forecast -->
+
+  <div class="view" id="viewControl">
+
+    <div class="card c-now">
+      <h2>Who is in charge <span class="tag" id="ctlActuation">—</span></h2>
+      <div class="seg">
+        <button id="btnAuto">AUTO</button>
+        <button id="btnManual">MANUAL</button>
+      </div>
+      <div class="note" id="ctlModeNote">—</div>
+    </div>
+
+    <div class="card c-chart">
+      <h2>Load <span class="tag" id="ctlContactorTag">—</span></h2>
+      <div class="big" id="ctlLoad">—<small>W</small></div>
+      <div class="sub" id="ctlLoadSub">—</div>
+      <button class="bigbtn" id="btnContactor" disabled>—</button>
+      <div class="note" id="ctlSwitchNote">Switch to manual to operate the contactor by hand.</div>
+    </div>
+
+    <div class="card c-save">
+      <h2>Run the plant from <span class="tag" id="ctlSrcTag">—</span></h2>
+      <div class="opt">
+        <button data-src="auto">Auto</button>
+        <button data-src="grid">Grid</button>
+        <button data-src="stored">Solar and battery</button>
+      </div>
+      <div class="note" id="ctlSrcNote">—</div>
+    </div>
+
+    <div class="card c-tariff">
+      <h2>Interlock</h2>
+      <div id="ctlInterlock"></div>
+      <div class="note">These limits are enforced on the microcontroller, not here.
+        They hold even if this software stops, which is why manual control cannot
+        override them.</div>
+    </div>
+
+    <div class="card c-batt">
+      <h2>Right now</h2>
+      <div id="ctlLive"></div>
+    </div>
+
+    <div class="card c-dec">
+      <h2>Control log</h2>
+      <div class="scroller" id="ctlLog"><div class="empty">Nothing yet.</div></div>
+    </div>
+
+  </div><!-- /control -->
+
+  <div class="toast" id="toast"></div>
 
   <footer id="foot">Udyog IQ · on-device · nothing leaves this site</footer>
  </div>
@@ -499,6 +585,7 @@ function render(s){
     if (lastPlan && lastPlan.actions) drawPlan($('plan'), lastPlan.actions);
   }
   renderForecast(s);
+  renderControl(s);
 }
 
 /* ------------------------------------------------------------------ */
@@ -730,11 +817,110 @@ function drawSchedule(cv, acts){
 }
 
 /* ------------------------------------------------------------------ */
+/* Control view                                                         */
+/* ------------------------------------------------------------------ */
+let toastTimer = null;
+function toast(msg){
+  const el = $('toast'); el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(()=>el.classList.remove('show'), 4200);
+}
+
+async function post(url, body){
+  try {
+    const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'},
+                               body: JSON.stringify(body)});
+    const j = await r.json().catch(()=>({}));
+    if (!r.ok){ toast(j.detail || ('Refused: ' + r.status)); return null; }
+    if (j.reason) toast(j.reason);
+    // Pull fresh state rather than guessing what changed.
+    fetch('/api/snapshot').then(x=>x.json()).then(render).catch(()=>{});
+    return j;
+  } catch (e){ toast('Could not reach the node.'); return null; }
+}
+
+function renderControl(s){
+  const pol = s.policy || {}, inv = s.inverter || {}, L = s.live || {};
+  const manual = pol.control_mode === 'manual';
+  const live = !!pol.actuation_enabled;
+
+  $('ctlActuation').textContent = live ? 'actuation live' : 'advisory, nothing switches';
+  $('btnAuto').classList.toggle('on', !manual);
+  $('btnManual').classList.toggle('on', manual);
+
+  $('ctlModeNote').innerHTML = manual
+    ? '<b>You are in control.</b> Idle cutoff, demand guard and anomaly trip are all suspended. Nothing will switch unless you ask for it. The contactor was left exactly as it was when you took over.'
+    : '<b>The node is in control.</b> It cuts idle machines, sheds load before a demand peak is set, and follows the battery plan. Every decision is logged with its reason in the Overview.';
+
+  // --- load and contactor ---
+  $('ctlLoad').innerHTML = fmt(L.load_w) + '<small>W</small>';
+  $('ctlLoadSub').textContent =
+    'grid ' + fmt(L.grid_w) + ' W \u00b7 solar ' + fmt(L.solar_w) + ' W \u00b7 battery ' + fmt(L.battery_w) + ' W';
+  const closed = pol.contactor_closed !== false;
+  $('ctlContactorTag').textContent = closed ? 'contactor closed' : 'contactor open';
+  const btn = $('btnContactor');
+  btn.textContent = closed ? 'Open the contactor (cut the load)'
+                           : 'Close the contactor (restore the load)';
+  btn.classList.toggle('danger', closed);
+  btn.disabled = !manual;
+  $('ctlSwitchNote').innerHTML = !manual
+    ? 'Switch to <b>manual</b> to operate the contactor by hand. In auto the node owns it, and two things fighting over one contactor makes a plant that flickers according to who acted last.'
+    : (live ? 'Actuation is live. This will move a real contactor, subject to the interlock.'
+            : 'Actuation is disabled in configuration, so this will be logged as advice rather than switching anything.');
+
+  // --- source preference ---
+  const pref = pol.source_preference || 'auto';
+  document.querySelectorAll('.opt button[data-src]').forEach(b=>{
+    b.classList.toggle('on', b.dataset.src === pref);
+  });
+  $('ctlSrcTag').textContent = inv.controllable ? 'inverter accepts commands' : 'preference only';
+  $('ctlSrcNote').innerHTML = inv.controllable
+    ? 'The inverter on this site accepts external commands, so this choice is enforced. <b>Auto</b> lets the optimiser decide, and it will decline to cycle the battery when the tariff spread does not cover the wear.'
+    : '<b>This inverter does not accept external commands</b>, so a source choice is recorded and reported but cannot be enforced. Most hybrid inverters already transfer between grid, solar and battery on their own. What this node can always control is the load, which is what the contactor above does.';
+
+  // --- interlock ---
+  const kv = (k,v)=>'<div class="kv"><span>'+k+'</span><span>'+v+'</span></div>';
+  $('ctlInterlock').innerHTML =
+    kv('Ready to switch', pol.interlock_ready ? 'yes' : 'no') +
+    (pol.interlock_reason ? kv('Blocked because', pol.interlock_reason) : '') +
+    kv('Switches this hour', fmt(pol.switches_this_hour) + ' of ' + fmt(pol.max_switches_per_hour)) +
+    kv('Manual override', pol.manual_override ? 'engaged' : 'clear');
+
+  // --- live figures ---
+  const b = s.battery || {};
+  const tnow = (s.tariff && s.tariff.now) || {};
+  $('ctlLive').innerHTML =
+    kv('Supply', fmt(L.voltage_v,1) + ' V \u00b7 ' + fmt(L.frequency_hz,2) + ' Hz \u00b7 PF ' + fmt(L.power_factor,2)) +
+    kv('Battery charge', fmt(b.soc_pct,0) + '%') +
+    kv('Source telemetry', inv.estimated ? 'estimated from the energy balance' : 'measured') +
+    kv('Tariff now', (tnow.window || '\u2014') + ' \u00b7 \u20b9' + fmt(tnow.rate_inr_per_kwh,2) + '/kWh');
+
+  // --- control log: only what a person caused or would care about ---
+  const interesting = new Set(['mode_change','source_change','manual_switch','restore']);
+  const log = (s.decisions||[]).filter(d=>interesting.has(d.kind)).slice(0,20);
+  $('ctlLog').innerHTML = log.length ? log.map(d=>
+    '<div class="reason"><span class="t">' + clock(d.timestamp) + '</span><span><b>' +
+    (d.outcome==='executed'?'Did':(d.outcome==='advised'?'Would':'Refused')) +
+    '</b> ' + d.reason + '</span></div>').join('')
+    : '<div class="empty">No control actions yet.</div>';
+}
+
+$('btnAuto').addEventListener('click', ()=>post('/api/control/mode', {mode:'auto'}));
+$('btnManual').addEventListener('click', ()=>post('/api/control/mode', {mode:'manual'}));
+$('btnContactor').addEventListener('click', ()=>{
+  const closed = !(lastSnap && lastSnap.policy && lastSnap.policy.contactor_closed === false);
+  post('/api/control/contactor', {closed: !closed});
+});
+document.querySelectorAll('.opt button[data-src]').forEach(b=>{
+  b.addEventListener('click', ()=>post('/api/control/source', {preference: b.dataset.src}));
+});
+
+/* ------------------------------------------------------------------ */
 /* Routing                                                              */
 /* ------------------------------------------------------------------ */
 function route(){
-  const want = location.hash === '#/forecast' ? 'Forecast' : 'Overview';
-  ['Overview','Forecast'].forEach(v=>{
+  const byHash = {'#/forecast':'Forecast', '#/control':'Control'};
+  const want = byHash[location.hash] || 'Overview';
+  ['Overview','Forecast','Control'].forEach(v=>{
     $('view'+v).classList.toggle('sel', v===want);
     $('nav'+v).classList.toggle('sel', v===want);
   });

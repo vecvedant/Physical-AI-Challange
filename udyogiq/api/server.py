@@ -205,6 +205,87 @@ def build_app(node) -> Any:
             "demand": node.demand.status(),
         })
 
+    @app.get("/api/control")
+    def control_state() -> JSONResponse:
+        """Everything the control view needs to render itself."""
+        return JSONResponse({
+            "policy": node.policy.status(),
+            "inverter": {
+                "adapter": node.inverter.name,
+                "controllable": bool(getattr(node.inverter, "controllable", False)),
+            },
+            "battery": node.battery.status(),
+            "decisions": node.policy.recent(15),
+        })
+
+    @app.post("/api/control/mode")
+    async def set_mode(payload: dict) -> JSONResponse:
+        """
+        Switch between automatic and manual control.
+
+        Manual suspends every automatic policy: idle cutoff, demand guard and
+        anomaly trip all stop evaluating. It deliberately does not move the
+        contactor, because a mode change that silently reconfigures the plant is
+        the kind of surprise that gets a controller switched off permanently.
+        """
+        from ..policy.engine import ControlMode
+        wanted = str(payload.get("mode", "")).strip().lower()
+        if wanted not in (m.value for m in ControlMode):
+            raise HTTPException(status_code=400, detail="mode must be auto or manual")
+        decision = node.policy.set_mode(wanted)
+        node.historian.add_decision(decision)
+        return JSONResponse({"ok": True, "mode": wanted, "reason": decision.reason})
+
+    @app.post("/api/control/source")
+    async def set_source(payload: dict) -> JSONResponse:
+        """
+        Choose which supply the plant should lean on.
+
+        Only enforceable when the inverter accepts external commands. Where it
+        does not, the preference is recorded and the response says so, rather
+        than the interface pretending a control did something.
+        """
+        from ..policy.engine import SourcePreference
+        wanted = str(payload.get("preference", "")).strip().lower()
+        if wanted not in (p.value for p in SourcePreference):
+            raise HTTPException(status_code=400,
+                                detail="preference must be auto, grid or stored")
+        controllable = bool(getattr(node.inverter, "controllable", False))
+        decision = node.policy.set_source_preference(wanted, controllable=controllable)
+        node.historian.add_decision(decision)
+        return JSONResponse({"ok": True, "preference": wanted,
+                             "enforceable": controllable,
+                             "reason": decision.reason})
+
+    @app.post("/api/control/contactor")
+    async def set_contactor(payload: dict) -> JSONResponse:
+        """
+        Open or close the contactor by hand.
+
+        Only accepted in manual mode. In automatic the node owns the contactor,
+        and letting a button fight the policy engine for it would produce a
+        plant that flickers according to who clicked last.
+
+        The request still goes through the interlock. Manual is not override:
+        minimum dwell and the switching rate cap protect the hardware from a
+        person clicking quickly just as much as from a bug.
+        """
+        from ..policy.engine import ControlMode
+        if node.policy.mode is not ControlMode.MANUAL:
+            raise HTTPException(
+                status_code=409,
+                detail="switch to manual control before operating the contactor")
+        if "closed" not in payload:
+            raise HTTPException(status_code=400, detail="closed is required")
+        decision = node.policy.request_contactor(bool(payload["closed"]))
+        node.historian.add_decision(decision)
+        return JSONResponse({
+            "ok": decision.outcome.value in ("executed", "advised"),
+            "outcome": decision.outcome.value,
+            "reason": decision.reason,
+            "contactor_closed": node.policy.contactor.closed,
+        })
+
     @app.post("/api/policy/override")
     async def override(payload: dict) -> JSONResponse:
         """

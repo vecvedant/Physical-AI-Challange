@@ -85,7 +85,7 @@ that trends over time.
 - **Load**, by multi horizon gradient boosting, self supervised on the site's own history.
 - **Solar**, from an Open-Meteo feed through a clear sky physics model with a learned residual correction that adapts to your roof's shading, tilt error and dust.
 
-### 4. Decides when to use what
+### 4. Decides when to use what, and acts on what it can
 Dynamic programming over discretised battery state of charge, wrapped in a
 receding horizon loop that recomputes the next 24 hours every 15 minutes:
 
@@ -99,19 +99,52 @@ subject to load always served, state of charge and rate limits,
 
 Battery wear is priced explicitly, so the optimiser will not destroy a battery
 chasing a small arbitrage. Sometimes the correct answer is to do nothing, and it
-says so.
+says so rather than cycling for the sake of looking busy.
+
+**Read the next section before believing that paragraph.** Optimising something
+you cannot actuate is not optimisation, it is a report, and this project is
+careful about which is which.
 
 ### 5. Proves it worked
 A shadow ledger runs the same day with no battery movement and no idle cutoff.
 The difference is what the device contributed, measured rather than claimed, and
 it is zero on days when there was nothing to gain.
 
+## What the node controls, and what it only advises
+
+This distinction matters more than any other in the project, so it is stated
+before the features rather than buried in a limitations list.
+
+| | Actuated? | How |
+|---|---|---|
+| **Loads** | **Yes** | A contactor in series with the machine supply, behind an interlock enforced on the microcontroller |
+| **Sources**, grid against solar and battery | **Only if the inverter accepts external commands** | Modbus to the inverter, on the same RS485 pair as the meter |
+
+**The node does not physically switch between grid and solar.** That transfer is
+the inverter's job, and nearly every hybrid inverter already does it internally.
+Building a source changeover into a project like this would be wrong on safety
+grounds as well: an improvised switch between grid and inverter output risks
+backfeeding a line somebody believes is dead, and a proper transfer switch is
+mechanically interlocked so that both sources can never connect at once.
+
+So the honest division is: **the inverter moves power between sources, and the
+node moves loads.** Where the inverter exposes Modbus, the node also commands its
+charge and discharge, and the dispatch plan above is enforced. Where it does not,
+the plan is reported and labelled as advice, and the node goes on doing the thing
+it can always do, which is deciding what runs and when.
+
+That is not a consolation prize. Every scenario tested during development put
+almost all of the available saving in demand charge shaving, which is a load side
+action, and almost none in battery arbitrage, which the wear cost usually makes
+uneconomic anyway.
+
 ## The dashboard
 
-Two views, both served from the board, both usable on a phone.
+Three views, all served from the board, all usable on a phone.
 
 - **Overview**: live power and energy flows, discovered machines with health, savings against the counterfactual, tariff position, decision log.
 - **Forecast**: predicted load against expected solar with peak tariff bands behind it, the battery schedule with its state of charge trajectory, what the plan costs against doing nothing, per horizon predictions with empirical intervals, and the training state of every model.
+- **Control**: an auto and manual switch. In **auto** the node runs its own policies. In **manual** every automatic policy is suspended, nothing switches on its own, and you operate the contactor and choose the source preference yourself. Switching mode never moves the contactor, and manual requests still pass through the interlock, because a person clicking quickly can chatter a contactor just as effectively as a bug can.
 
 Views are hash routed, so `#/forecast` is linkable and survives a reload.
 
@@ -215,7 +248,8 @@ it before anything switches.
 - Disaggregation cannot see a small load hiding under a large running one. The detection threshold scales with local noise, so while a large motor runs, a small fan switching sits below the floor. That is structural, not a tuning failure.
 - Machines that switch rarely take proportionally longer to discover, because a machine only becomes knowable once it has switched often enough to form a cluster.
 - Two machines that always switch together will be reported as one. The dashboard shows uncertain clusters as unnamed candidates rather than asserting they are machines.
-- Battery dispatch is advisory unless the inverter accepts external commands.
+- Battery dispatch is advisory unless the inverter accepts external commands. The dashboard says which of the two it is, rather than offering a control that quietly does nothing.
+- The node does not switch between grid and solar. That belongs to the inverter, for safety reasons as much as practical ones.
 - The firmware has not been flashed. It is statically checked against the Python side, and that is not the same as working.
 
 ## Licence

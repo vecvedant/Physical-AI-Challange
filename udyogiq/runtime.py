@@ -310,8 +310,25 @@ class UdyogIQ:
                                now=now, force=True)
         if action is None:
             return
-        if self.inverter.controllable and CONFIG.policy.actuation_enabled:
-            self.inverter.command_battery(action.battery_w)
+
+        if not (self.inverter.controllable and CONFIG.policy.actuation_enabled):
+            return
+
+        # The operator's source preference overrides the optimiser, because a
+        # person who has said "run from the grid today" has a reason the node
+        # cannot see. In AUTO the optimiser decides.
+        from .policy.engine import ControlMode, SourcePreference
+        pref = self.policy.source_preference
+        watts = action.battery_w
+        if self.policy.mode is ControlMode.MANUAL or pref is not SourcePreference.AUTO:
+            if pref is SourcePreference.GRID:
+                watts = 0.0                     # hold the battery
+            elif pref is SourcePreference.STORED:
+                # Cover the load from storage as far as the limits allow.
+                with self._lock:
+                    load = self._load_w
+                watts = max(0.0, load)
+        self.inverter.command_battery(watts)
 
     def _task_policy(self) -> None:
         now = time.time()
@@ -581,6 +598,14 @@ class UdyogIQ:
             "battery": self.battery.status(),
             "dispatch": plan.to_dict(limit=96) if plan else None,
             "policy": self.policy.status(),
+            "inverter": {
+                "adapter": self.inverter.name,
+                # Whether a source preference can actually be enforced, as
+                # opposed to merely recorded. The dashboard says so plainly
+                # rather than offering a control that quietly does nothing.
+                "controllable": bool(getattr(self.inverter, "controllable", False)),
+                "estimated": bool(self.inverter.read().get("estimated", 0.0)),
+            },
             "decisions": self.policy.recent(20),
             "accounting": self.accountant.snapshot(),
             "savings": self.counterfactual.snapshot(),

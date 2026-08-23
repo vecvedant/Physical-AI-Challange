@@ -38,12 +38,37 @@ from typing import Any, Callable
 from ..config import CONFIG
 
 
+class ControlMode(str, Enum):
+    """Who is deciding."""
+
+    AUTO = "auto"        # the node evaluates and acts on its own policies
+    MANUAL = "manual"    # a person decides; automatic evaluation is suspended
+
+
+class SourcePreference(str, Enum):
+    """
+    Which supply the operator wants the plant to lean on.
+
+    An honest caveat carried through the whole stack: this is only a preference
+    unless the inverter accepts external commands. Where it does not, the node
+    records the request, reports plainly that it could not be enforced, and goes
+    on controlling the one thing it certainly can, which is the load.
+    """
+
+    AUTO = "auto"        # let the optimiser choose
+    GRID = "grid"        # hold the battery, run from the grid
+    STORED = "stored"    # prefer solar and battery, spare the grid
+
+
 class ActionKind(str, Enum):
     IDLE_CUTOFF = "idle_cutoff"
     DEMAND_SHED = "demand_shed"
     ANOMALY_TRIP = "anomaly_trip"
     RESTORE = "restore"
     DISPATCH = "dispatch"
+    MANUAL_SWITCH = "manual_switch"
+    MODE_CHANGE = "mode_change"
+    SOURCE_CHANGE = "source_change"
     NONE = "none"
 
 
@@ -98,6 +123,11 @@ class PolicyEngine:
         self.actuator = actuator
         self.contactor = ContactorState(last_change_t=time.time(),
                                         _hour_started_t=time.time())
+        #: AUTO on start. A node that came up in manual after a power cut would
+        #: sit there deciding nothing while nobody realised it had stopped.
+        self.mode = ControlMode.AUTO
+        self.source_preference = SourcePreference.AUTO
+        self.mode_changed_t = time.time()
         self.decisions: list[Decision] = []
         #: appliance id -> when it was first seen idle
         self._idle_since: dict[int, float] = {}
@@ -155,6 +185,71 @@ class PolicyEngine:
         return Outcome.EXECUTED, ""
 
     # ------------------------------------------------------------------ #
+    # ------------------------------------------------------------------ #
+    # Who is in charge
+    # ------------------------------------------------------------------ #
+    def set_mode(self, mode: "ControlMode | str", now: float | None = None) -> Decision:
+        """
+        Hand control to the operator, or take it back.
+
+        Changing mode does not move the contactor. Whatever state the plant is
+        in stays put until somebody asks for something else, because a mode
+        switch that silently reconfigures a workshop is exactly the surprise
+        that gets a control system unplugged for good.
+        """
+        now = now if now is not None else time.time()
+        mode = ControlMode(mode)
+        previous, self.mode = self.mode, mode
+        self.mode_changed_t = now
+        return self._record(Decision(
+            timestamp=now, kind=ActionKind.MODE_CHANGE, outcome=Outcome.EXECUTED,
+            reason=("Control handed to the operator. Automatic policies are "
+                    "suspended and nothing will switch on its own."
+                    if mode is ControlMode.MANUAL else
+                    "Control returned to the node. Automatic policies resumed."),
+            detail={"from": previous.value, "to": mode.value},
+        ))
+
+    def set_source_preference(self, pref: "SourcePreference | str",
+                              controllable: bool = False,
+                              now: float | None = None) -> Decision:
+        """Record which supply the operator wants the plant to lean on."""
+        now = now if now is not None else time.time()
+        pref = SourcePreference(pref)
+        self.source_preference = pref
+        label = {SourcePreference.AUTO: "let the optimiser choose",
+                 SourcePreference.GRID: "run from the grid and hold the battery",
+                 SourcePreference.STORED: "prefer solar and battery"}[pref]
+        return self._record(Decision(
+            timestamp=now, kind=ActionKind.SOURCE_CHANGE,
+            outcome=Outcome.EXECUTED if controllable else Outcome.ADVISED,
+            reason=(f"Source preference set to {label}." if controllable else
+                    f"Source preference noted ({label}), but this inverter does "
+                    f"not accept external commands, so it cannot be enforced."),
+            detail={"preference": pref.value, "controllable": controllable},
+        ))
+
+    def request_contactor(self, closed: bool, who: str = "Operator",
+                          now: float | None = None) -> Decision:
+        """
+        A switch asked for by a person rather than by a policy.
+
+        Goes through the same interlock as everything else. A manual request is
+        not an override: minimum dwell and the switching rate cap exist to stop
+        the contactor being chattered, and somebody clicking a button quickly
+        can do that just as effectively as a bug can.
+        """
+        now = now if now is not None else time.time()
+        outcome, why = self._switch(closed, now)
+        reason = f"{who} asked for the contactor to be {'closed' if closed else 'opened'}"
+        if why:
+            reason += f" ({why})"
+        return self._record(Decision(
+            timestamp=now, kind=ActionKind.MANUAL_SWITCH, outcome=outcome,
+            reason=reason, detail={"requested_closed": closed},
+        ))
+
+    # ------------------------------------------------------------------ #
     def evaluate_idle(self, appliances: list[Any], tariff_rate: float,
                       now: float | None = None) -> list[Decision]:
         """
@@ -166,7 +261,8 @@ class PolicyEngine:
         rather than absolute because standby scales with machine size.
         """
         now = now if now is not None else time.time()
-        if not self.cfg.idle_cutoff_enabled:
+        # A person holding control means nothing switches on its own.
+        if self.mode is ControlMode.MANUAL or not self.cfg.idle_cutoff_enabled:
             return []
 
         out: list[Decision] = []
@@ -223,7 +319,8 @@ class PolicyEngine:
         that reacts is a demand guard that does not work.
         """
         now = now if now is not None else time.time()
-        if not self.cfg.demand_guard_enabled or limit_kva <= 0:
+        if (self.mode is ControlMode.MANUAL
+                or not self.cfg.demand_guard_enabled or limit_kva <= 0):
             return None
 
         threshold = limit_kva * (1.0 - self.cfg.demand_guard_headroom_pct / 100.0)
@@ -260,7 +357,7 @@ class PolicyEngine:
         genuinely is safer, and it stays off until someone decides that.
         """
         now = now if now is not None else time.time()
-        if not self.cfg.anomaly_trip_enabled:
+        if self.mode is ControlMode.MANUAL or not self.cfg.anomaly_trip_enabled:
             return None
 
         worst = None
@@ -319,6 +416,9 @@ class PolicyEngine:
         ok, why = self._interlock_ok(time.time())
         return {
             "actuation_enabled": self.cfg.actuation_enabled,
+            "control_mode": self.mode.value,
+            "source_preference": self.source_preference.value,
+            "mode_changed_t": self.mode_changed_t,
             "mode": "active" if self.cfg.actuation_enabled else "advisory",
             "contactor_closed": c.closed,
             "manual_override": c.manual_override,
